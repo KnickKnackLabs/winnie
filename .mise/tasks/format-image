@@ -108,8 +108,10 @@ mkdir -p \"\$MOUNT_DATA/isos\"
 if [[ -n '$ISO_BASENAME' ]] && [[ -f '/iso/$ISO_BASENAME' ]]; then
   echo 'Copying ISO to image...'
   cp '/iso/$ISO_BASENAME' \"\$MOUNT_DATA/isos/\"
+  ls -lh \"\$MOUNT_DATA/isos/\"
 fi
 
+sync
 echo 'Cleaning up...'
 umount \"\$MOUNT_EFI\" \"\$MOUNT_DATA\"
 kpartx -dv \"\$LOOPDEV\"
