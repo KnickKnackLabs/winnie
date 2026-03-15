@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+#MISE description="Boot a winnie disk image in QEMU"
+#USAGE flag "-i --image <path>" help="Disk image path" default="disk.img"
+#USAGE flag "--uefi" help="Boot in UEFI mode (default: BIOS)"
+#USAGE flag "--headless" help="Headless mode (serial console, no GUI window)"
+#USAGE flag "-m --memory <size>" help="RAM in MB" default="512"
+set -euo pipefail
+
+IMAGE="${usage_image}"
+UEFI="${usage_uefi:-false}"
+HEADLESS="${usage_headless:-false}"
+MEMORY="${usage_memory}"
+
+if [[ ! -f "$IMAGE" ]]; then
+  echo "Error: $IMAGE not found."
+  echo "Create one with: winnie format-image"
+  exit 1
+fi
+
+if ! command -v qemu-system-x86_64 &>/dev/null; then
+  echo "Error: qemu-system-x86_64 not found."
+  echo "Install with: winnie install-deps"
+  exit 1
+fi
+
+QEMU_ARGS=(
+  qemu-system-x86_64
+  -m "$MEMORY"
+  -drive "file=$IMAGE,format=raw"
+  -boot c
+)
+
+# UEFI firmware
+if [[ "$UEFI" == "true" ]]; then
+  # Find OVMF firmware
+  OVMF=""
+  for candidate in \
+    "$(brew --prefix 2>/dev/null)/share/qemu/edk2-x86_64-code.fd" \
+    /usr/share/OVMF/OVMF_CODE.fd \
+    /usr/share/edk2/x64/OVMF_CODE.fd \
+    /usr/share/qemu/OVMF.fd; do
+    if [[ -f "$candidate" ]]; then
+      OVMF="$candidate"
+      break
+    fi
+  done
+  if [[ -z "$OVMF" ]]; then
+    echo "Error: UEFI firmware (OVMF) not found."
+    echo "It should ship with QEMU. Check your installation."
+    exit 1
+  fi
+  QEMU_ARGS+=(-bios "$OVMF")
+fi
+
+# Headless: serial console instead of GUI
+if [[ "$HEADLESS" == "true" ]]; then
+  QEMU_ARGS+=(-nographic -serial mon:stdio)
+fi
+
+echo "Booting $IMAGE ($(if [[ "$UEFI" == "true" ]]; then echo "UEFI"; else echo "BIOS"; fi), ${MEMORY}MB RAM$(if [[ "$HEADLESS" == "true" ]]; then echo ", headless"; fi))..."
+exec "${QEMU_ARGS[@]}"
