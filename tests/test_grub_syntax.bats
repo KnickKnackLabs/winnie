@@ -60,7 +60,7 @@ REPO_DIR="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
   [ "$loopback_line" -lt "$casper_line" ]
 }
 
-@test "grub.cfg uses WEINERTOY label" {
-  run grep -c 'WEINERTOY' "$REPO_DIR/grub/grub.cfg"
+@test "grub.cfg uses WINNIE label" {
+  run grep -c 'WINNIE' "$REPO_DIR/grub/grub.cfg"
   [ "$output" -ge 1 ]
 }

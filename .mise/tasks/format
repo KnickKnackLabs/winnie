@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Format a USB drive as a weiner-toy multiboot drive"
+#MISE description="Format a USB drive as a winnie multiboot drive"
 #USAGE flag "-d --device <device>" help="Block device (e.g., /dev/sdb)" required
 #USAGE flag "-y --yes" help="Skip confirmation prompt"
 set -euo pipefail
@@ -9,7 +9,7 @@ SKIP_CONFIRM="${usage_yes:-false}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-LABEL="WEINERTOY"
+LABEL="WINNIE"
 BIOS_BOOT_SIZE="2M"
 EFI_SIZE="256M"
 
@@ -59,7 +59,7 @@ if [[ -f "$removable_path" ]]; then
 fi
 
 # Show what we're about to do
-echo "weiner-toy: format"
+echo "winnie: format"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 lsblk "$DEVICE" 2>/dev/null || true
@@ -160,7 +160,7 @@ mkdir -p "$MOUNT_DATA/isos"
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "weiner-toy: $DEVICE is ready!"
+echo "winnie: $DEVICE is ready!"
 echo ""
 echo "Next steps:"
 echo "  1. Mount the data partition: mount $PART_DATA /mnt"

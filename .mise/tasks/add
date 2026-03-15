@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Copy an ISO file to the weiner-toy USB"
+#MISE description="Copy an ISO file to the winnie USB"
 #USAGE arg "<iso>" help="Path to ISO file to add"
 #USAGE flag "-d --device <device>" help="Block device (e.g., /dev/sdb)" required
 set -euo pipefail
@@ -24,7 +24,7 @@ else
 fi
 
 if [[ ! -b "$PART_DATA" ]]; then
-  echo "Error: $PART_DATA not found. Is $DEVICE a weiner-toy USB?"
+  echo "Error: $PART_DATA not found. Is $DEVICE a winnie USB?"
   exit 1
 fi
 
@@ -41,7 +41,7 @@ fi
 
 ISO_DIR="$MOUNT_POINT/isos"
 if [[ ! -d "$ISO_DIR" ]]; then
-  echo "Error: $ISO_DIR not found. Is $DEVICE a weiner-toy USB?"
+  echo "Error: $ISO_DIR not found. Is $DEVICE a winnie USB?"
   if [[ "$MOUNTED_BY_US" == "true" ]]; then
     umount "$MOUNT_POINT"
     rmdir "$MOUNT_POINT"

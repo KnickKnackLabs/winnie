@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+#MISE description="Create a formatted winnie disk image (for testing via QEMU)"
+#USAGE flag "-o --output <path>" help="Output image path" default="disk.img"
+#USAGE flag "-s --size <size>" help="Image size in MB" default="2048"
+#USAGE flag "--iso <path>" help="Optional: ISO file to pre-load onto the image"
+set -euo pipefail
+
+OUTPUT="${usage_output}"
+SIZE="${usage_size}"
+ISO="${usage_iso:-}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+# Preflight
+if ! command -v docker &>/dev/null; then
+  echo "Error: docker is required for format-image."
+  echo "Install Docker Desktop or Docker Engine."
+  exit 1
+fi
+
+if ! docker info &>/dev/null 2>&1; then
+  echo "Error: Docker daemon is not running."
+  exit 1
+fi
+
+# Create raw disk image
+echo "Creating ${SIZE}MB raw disk image at $OUTPUT..."
+dd if=/dev/zero of="$OUTPUT" bs=1M count="$SIZE" status=progress 2>&1
+
+# Build Docker command
+DOCKER_ARGS=(
+  docker run --rm --privileged
+  -v "$REPO_DIR":/repo:ro
+  -v "$(cd "$(dirname "$OUTPUT")" && pwd)":/out
+)
+
+# Mount ISO if provided
+if [[ -n "$ISO" ]]; then
+  if [[ ! -f "$ISO" ]]; then
+    echo "Error: ISO file not found: $ISO"
+    rm -f "$OUTPUT"
+    exit 1
+  fi
+  DOCKER_ARGS+=(-v "$(cd "$(dirname "$ISO")" && pwd)":/iso:ro)
+  ISO_BASENAME="$(basename "$ISO")"
+fi
+
+OUTPUT_BASENAME="$(basename "$OUTPUT")"
+
+"${DOCKER_ARGS[@]}" debian:bookworm bash -c "
+set -euo pipefail
+
+echo 'Installing tools...'
+apt-get update -qq
+apt-get install -y -qq gdisk dosfstools e2fsprogs grub-pc-bin grub-efi-amd64-bin grub2-common > /dev/null 2>&1
+
+echo 'Setting up loopback device...'
+losetup -fP /out/$OUTPUT_BASENAME
+LOOPDEV=\$(losetup -j /out/$OUTPUT_BASENAME | cut -d: -f1)
+echo \"  -> \$LOOPDEV\"
+
+echo 'Creating GPT partition table...'
+sgdisk --zap-all \"\$LOOPDEV\"
+sgdisk \\
+  --new=1:2048:+2M    --typecode=1:ef02 --change-name=1:'BIOS Boot' \\
+  --new=2:0:+256M     --typecode=2:ef00 --change-name=2:'EFI System' \\
+  --new=3:0:0          --typecode=3:8300 --change-name=3:'WINNIE' \\
+  \"\$LOOPDEV\"
+partprobe \"\$LOOPDEV\"
+sleep 1
+
+echo 'Formatting partitions...'
+mkfs.fat -F 32 -n EFI \"\${LOOPDEV}p2\"
+mkfs.ext4 -L WINNIE -q \"\${LOOPDEV}p3\"
+
+MOUNT_DATA=\$(mktemp -d)
+MOUNT_EFI=\$(mktemp -d)
+mount \"\${LOOPDEV}p3\" \"\$MOUNT_DATA\"
+mount \"\${LOOPDEV}p2\" \"\$MOUNT_EFI\"
+
+echo 'Installing GRUB (Legacy BIOS)...'
+grub-install \\
+  --target=i386-pc \\
+  --boot-directory=\"\$MOUNT_DATA/boot\" \\
+  --removable \\
+  \"\$LOOPDEV\"
+
+echo 'Installing GRUB (UEFI)...'
+grub-install \\
+  --target=x86_64-efi \\
+  --boot-directory=\"\$MOUNT_DATA/boot\" \\
+  --efi-directory=\"\$MOUNT_EFI\" \\
+  --removable
+
+echo 'Deploying grub.cfg...'
+cp /repo/grub/grub.cfg \"\$MOUNT_DATA/boot/grub/grub.cfg\"
+
+mkdir -p \"\$MOUNT_DATA/isos\"
+
+# Copy ISO if provided
+if [[ -n '${ISO_BASENAME:-}' ]] && [[ -f '/iso/${ISO_BASENAME:-}' ]]; then
+  echo 'Copying ISO to image...'
+  cp '/iso/$ISO_BASENAME' \"\$MOUNT_DATA/isos/\"
+fi
+
+echo 'Cleaning up...'
+umount \"\$MOUNT_EFI\" \"\$MOUNT_DATA\"
+losetup -d \"\$LOOPDEV\"
+
+echo 'Done.'
+"
+
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "Image ready: $OUTPUT"
+echo ""
+echo "Boot with QEMU:"
+echo "  # BIOS mode"
+echo "  qemu-system-x86_64 -m 512 -drive file=$OUTPUT,format=raw -boot c"
+echo ""
+echo "  # UEFI mode (macOS)"
+echo "  qemu-system-x86_64 -m 512 -bios \$(brew --prefix)/share/qemu/edk2-x86_64-code.fd -drive file=$OUTPUT,format=raw -boot c"
