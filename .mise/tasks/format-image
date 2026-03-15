@@ -43,6 +43,8 @@ if [[ -n "$ISO" ]]; then
   fi
   DOCKER_ARGS+=(-v "$(cd "$(dirname "$ISO")" && pwd)":/iso:ro)
   ISO_BASENAME="$(basename "$ISO")"
+else
+  ISO_BASENAME=""
 fi
 
 OUTPUT_BASENAME="$(basename "$OUTPUT")"
@@ -98,7 +100,7 @@ cp /repo/grub/grub.cfg \"\$MOUNT_DATA/boot/grub/grub.cfg\"
 mkdir -p \"\$MOUNT_DATA/isos\"
 
 # Copy ISO if provided
-if [[ -n '${ISO_BASENAME:-}' ]] && [[ -f '/iso/${ISO_BASENAME:-}' ]]; then
+if [[ -n '$ISO_BASENAME' ]] && [[ -f '/iso/$ISO_BASENAME' ]]; then
   echo 'Copying ISO to image...'
   cp '/iso/$ISO_BASENAME' \"\$MOUNT_DATA/isos/\"
 fi
