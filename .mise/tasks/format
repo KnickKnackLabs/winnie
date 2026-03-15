@@ -1,0 +1,171 @@
+#!/usr/bin/env bash
+#MISE description="Format a USB drive as a weiner-toy multiboot drive"
+#USAGE flag "-d --device <device>" help="Block device (e.g., /dev/sdb)" required
+#USAGE flag "-y --yes" help="Skip confirmation prompt"
+set -euo pipefail
+
+DEVICE="${usage_device}"
+SKIP_CONFIRM="${usage_yes:-false}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+LABEL="WEINERTOY"
+BIOS_BOOT_SIZE="2M"
+EFI_SIZE="256M"
+
+# ── Preflight checks ──────────────────────────────────────────────
+
+if [[ "$(uname)" != "Linux" ]]; then
+  echo "Error: format requires Linux (grub-install, sgdisk, mkfs)."
+  exit 1
+fi
+
+if [[ $EUID -ne 0 ]]; then
+  echo "Error: format must run as root (need access to block devices)."
+  echo "Try: sudo mise run format -d $DEVICE"
+  exit 1
+fi
+
+# Check required tools
+missing=()
+for cmd in sgdisk mkfs.fat mkfs.ext4 grub-install partprobe; do
+  if ! command -v "$cmd" &>/dev/null; then
+    missing+=("$cmd")
+  fi
+done
+if [[ ${#missing[@]} -gt 0 ]]; then
+  echo "Error: missing required tools: ${missing[*]}"
+  echo ""
+  echo "On Debian/Ubuntu:  apt install gdisk dosfstools e2fsprogs grub-pc-bin grub-efi-amd64-bin"
+  echo "On Fedora:         dnf install gdisk dosfstools e2fsprogs grub2-pc-modules grub2-efi-x64-modules"
+  echo "On Arch:           pacman -S gptfdisk dosfstools e2fsprogs grub"
+  exit 1
+fi
+
+# Validate device
+if [[ ! -b "$DEVICE" ]]; then
+  echo "Error: $DEVICE is not a block device."
+  exit 1
+fi
+
+# Safety: refuse to format non-removable drives
+removable_path="/sys/block/$(basename "$DEVICE")/removable"
+if [[ -f "$removable_path" ]]; then
+  if [[ "$(cat "$removable_path")" != "1" ]]; then
+    echo "Error: $DEVICE does not appear to be a removable drive."
+    echo "If you're sure, check /sys/block/$(basename "$DEVICE")/removable"
+    exit 1
+  fi
+fi
+
+# Show what we're about to do
+echo "weiner-toy: format"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+lsblk "$DEVICE" 2>/dev/null || true
+echo ""
+echo "This will DESTROY all data on $DEVICE and create:"
+echo "  Part 1: BIOS Boot     ($BIOS_BOOT_SIZE)"
+echo "  Part 2: EFI System    ($EFI_SIZE, FAT32)"
+echo "  Part 3: Data          (remaining, ext4, label: $LABEL)"
+echo ""
+
+if [[ "$SKIP_CONFIRM" != "true" ]]; then
+  if command -v gum &>/dev/null; then
+    gum confirm "Proceed with formatting $DEVICE?" || exit 1
+  else
+    read -rp "Type YES to confirm: " confirm
+    if [[ "$confirm" != "YES" ]]; then
+      echo "Aborted."
+      exit 1
+    fi
+  fi
+fi
+
+# ── Unmount any existing partitions ───────────────────────────────
+
+echo "Unmounting existing partitions..."
+for part in "${DEVICE}"*; do
+  if mountpoint -q "$part" 2>/dev/null || mount | grep -q "^$part "; then
+    umount "$part" 2>/dev/null || true
+  fi
+done
+
+# ── Partition ─────────────────────────────────────────────────────
+
+echo "Creating GPT partition table..."
+sgdisk --zap-all "$DEVICE"
+sgdisk \
+  --new=1:2048:+${BIOS_BOOT_SIZE}  --typecode=1:ef02  --change-name=1:"BIOS Boot" \
+  --new=2:0:+${EFI_SIZE}           --typecode=2:ef00  --change-name=2:"EFI System" \
+  --new=3:0:0                      --typecode=3:8300  --change-name=3:"$LABEL" \
+  "$DEVICE"
+
+# Let kernel re-read partition table
+partprobe "$DEVICE"
+sleep 1
+
+# Determine partition device names (handles both /dev/sdX1 and /dev/nvme0n1p1 patterns)
+if [[ "$DEVICE" =~ [0-9]$ ]]; then
+  PART_PREFIX="${DEVICE}p"
+else
+  PART_PREFIX="${DEVICE}"
+fi
+PART_EFI="${PART_PREFIX}2"
+PART_DATA="${PART_PREFIX}3"
+
+# ── Format ────────────────────────────────────────────────────────
+
+echo "Formatting EFI partition (FAT32)..."
+mkfs.fat -F 32 -n "EFI" "$PART_EFI"
+
+echo "Formatting data partition (ext4)..."
+mkfs.ext4 -L "$LABEL" -q "$PART_DATA"
+
+# ── Mount ─────────────────────────────────────────────────────────
+
+MOUNT_DATA=$(mktemp -d)
+MOUNT_EFI=$(mktemp -d)
+trap 'umount "$MOUNT_EFI" 2>/dev/null; umount "$MOUNT_DATA" 2>/dev/null; rmdir "$MOUNT_EFI" "$MOUNT_DATA" 2>/dev/null' EXIT
+
+mount "$PART_DATA" "$MOUNT_DATA"
+mount "$PART_EFI" "$MOUNT_EFI"
+
+# ── Install GRUB ─────────────────────────────────────────────────
+
+echo "Installing GRUB for Legacy BIOS..."
+grub-install \
+  --target=i386-pc \
+  --boot-directory="$MOUNT_DATA/boot" \
+  --removable \
+  "$DEVICE"
+
+echo "Installing GRUB for UEFI..."
+grub-install \
+  --target=x86_64-efi \
+  --boot-directory="$MOUNT_DATA/boot" \
+  --efi-directory="$MOUNT_EFI" \
+  --removable
+
+# ── Deploy config ─────────────────────────────────────────────────
+
+echo "Deploying grub.cfg..."
+cp "$REPO_DIR/grub/grub.cfg" "$MOUNT_DATA/boot/grub/grub.cfg"
+
+# ── Create ISO directory ──────────────────────────────────────────
+
+mkdir -p "$MOUNT_DATA/isos"
+
+# ── Done ──────────────────────────────────────────────────────────
+
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "weiner-toy: $DEVICE is ready!"
+echo ""
+echo "Next steps:"
+echo "  1. Mount the data partition: mount $PART_DATA /mnt"
+echo "  2. Copy ISOs:               cp *.iso /mnt/isos/"
+echo "  3. Unmount:                  umount /mnt"
+echo "  4. Boot from USB!"
+echo ""
+echo "Or use: mise run add -d $DEVICE <iso-file>"

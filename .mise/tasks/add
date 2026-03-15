@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+#MISE description="Copy an ISO file to the weiner-toy USB"
+#USAGE arg "<iso>" help="Path to ISO file to add"
+#USAGE flag "-d --device <device>" help="Block device (e.g., /dev/sdb)" required
+set -euo pipefail
+
+ISO="${usage_iso}"
+DEVICE="${usage_device}"
+
+if [[ ! -f "$ISO" ]]; then
+  echo "Error: $ISO does not exist or is not a file."
+  exit 1
+fi
+
+if [[ ! "$ISO" =~ \.(iso|ISO)$ ]]; then
+  echo "Warning: $ISO doesn't have an .iso extension. Continuing anyway."
+fi
+
+# Find the data partition (partition 3)
+if [[ "$DEVICE" =~ [0-9]$ ]]; then
+  PART_DATA="${DEVICE}p3"
+else
+  PART_DATA="${DEVICE}3"
+fi
+
+if [[ ! -b "$PART_DATA" ]]; then
+  echo "Error: $PART_DATA not found. Is $DEVICE a weiner-toy USB?"
+  exit 1
+fi
+
+# Check if already mounted
+MOUNT_POINT=$(findmnt -n -o TARGET "$PART_DATA" 2>/dev/null || true)
+MOUNTED_BY_US=false
+
+if [[ -z "$MOUNT_POINT" ]]; then
+  MOUNT_POINT=$(mktemp -d)
+  mount "$PART_DATA" "$MOUNT_POINT"
+  MOUNTED_BY_US=true
+  trap 'umount "$MOUNT_POINT" 2>/dev/null; rmdir "$MOUNT_POINT" 2>/dev/null' EXIT
+fi
+
+ISO_DIR="$MOUNT_POINT/isos"
+if [[ ! -d "$ISO_DIR" ]]; then
+  echo "Error: $ISO_DIR not found. Is $DEVICE a weiner-toy USB?"
+  if [[ "$MOUNTED_BY_US" == "true" ]]; then
+    umount "$MOUNT_POINT"
+    rmdir "$MOUNT_POINT"
+  fi
+  exit 1
+fi
+
+BASENAME=$(basename "$ISO")
+if [[ -f "$ISO_DIR/$BASENAME" ]]; then
+  echo "$BASENAME already exists on the USB. Overwrite?"
+  if command -v gum &>/dev/null; then
+    gum confirm "Overwrite $BASENAME?" || exit 1
+  else
+    read -rp "Type YES to overwrite: " confirm
+    [[ "$confirm" == "YES" ]] || exit 1
+  fi
+fi
+
+echo "Copying $BASENAME to USB..."
+cp --progress "$ISO" "$ISO_DIR/$BASENAME"
+sync
+
+echo "Done. $BASENAME is now on the USB."
+echo "ISOs on drive:"
+ls -lh "$ISO_DIR"/*.iso 2>/dev/null || echo "  (none)"

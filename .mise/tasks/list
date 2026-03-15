@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+#MISE description="List ISOs on a weiner-toy USB drive"
+#USAGE flag "-d --device <device>" help="Block device (e.g., /dev/sdb)" required
+set -euo pipefail
+
+DEVICE="${usage_device}"
+
+# Find the data partition (partition 3)
+if [[ "$DEVICE" =~ [0-9]$ ]]; then
+  PART_DATA="${DEVICE}p3"
+else
+  PART_DATA="${DEVICE}3"
+fi
+
+if [[ ! -b "$PART_DATA" ]]; then
+  echo "Error: $PART_DATA not found. Is $DEVICE a weiner-toy USB?"
+  exit 1
+fi
+
+# Check if already mounted
+MOUNT_POINT=$(findmnt -n -o TARGET "$PART_DATA" 2>/dev/null || true)
+MOUNTED_BY_US=false
+
+if [[ -z "$MOUNT_POINT" ]]; then
+  MOUNT_POINT=$(mktemp -d)
+  mount -o ro "$PART_DATA" "$MOUNT_POINT"
+  MOUNTED_BY_US=true
+  trap 'umount "$MOUNT_POINT" 2>/dev/null; rmdir "$MOUNT_POINT" 2>/dev/null' EXIT
+fi
+
+ISO_DIR="$MOUNT_POINT/isos"
+if [[ ! -d "$ISO_DIR" ]]; then
+  echo "No /isos directory found. Is $DEVICE a weiner-toy USB?"
+  exit 1
+fi
+
+# Detect distro family for each ISO
+detect_distro() {
+  local iso="$1"
+  local mnt
+  mnt=$(mktemp -d)
+
+  if ! mount -o ro,loop "$iso" "$mnt" 2>/dev/null; then
+    echo "Unknown (mount failed)"
+    rmdir "$mnt" 2>/dev/null
+    return
+  fi
+
+  local family="Unknown"
+  if [[ -e "$mnt/boot/grub/loopback.cfg" ]]; then
+    family="loopback.cfg"
+  elif [[ -e "$mnt/casper/vmlinuz" ]]; then
+    family="Ubuntu/Casper"
+  elif [[ -e "$mnt/live/vmlinuz" ]]; then
+    family="Debian Live"
+  elif [[ -e "$mnt/arch/boot/x86_64/vmlinuz-linux" ]]; then
+    family="Arch Linux"
+  elif [[ -e "$mnt/images/pxeboot/vmlinuz" ]]; then
+    family="Fedora"
+  elif [[ -e "$mnt/boot/vmlinuz-lts" ]]; then
+    family="Alpine"
+  elif [[ -e "$mnt/boot/bzImage" ]]; then
+    family="NixOS"
+  fi
+
+  umount "$mnt" 2>/dev/null
+  rmdir "$mnt" 2>/dev/null
+  echo "$family"
+}
+
+echo "weiner-toy: $DEVICE"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+
+count=0
+for iso in "$ISO_DIR"/*.iso "$ISO_DIR"/*.ISO; do
+  if [[ -f "$iso" ]]; then
+    basename=$(basename "$iso")
+    size=$(du -h "$iso" | cut -f1)
+    distro=$(detect_distro "$iso")
+    printf "  %-50s %8s  [%s]\n" "$basename" "$size" "$distro"
+    count=$((count + 1))
+  fi
+done
+
+if [[ $count -eq 0 ]]; then
+  echo "  No ISOs found."
+  echo ""
+  echo "  Add ISOs with: mise run add -d $DEVICE <iso-file>"
+fi
+
+echo ""
+echo "$count ISO(s) on drive."
