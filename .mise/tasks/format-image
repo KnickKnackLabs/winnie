@@ -30,6 +30,7 @@ dd if=/dev/zero of="$OUTPUT" bs=1M count="$SIZE" status=progress 2>&1
 # Build Docker command
 DOCKER_ARGS=(
   docker run --rm --privileged
+  --platform linux/amd64
   -v "$REPO_DIR":/repo:ro
   -v "$(cd "$(dirname "$OUTPUT")" && pwd)":/out
 )
@@ -54,11 +55,10 @@ set -euo pipefail
 
 echo 'Installing tools...'
 apt-get update -qq
-apt-get install -y -qq gdisk dosfstools e2fsprogs grub-pc-bin grub-efi-amd64-bin grub2-common > /dev/null 2>&1
+apt-get install -y -qq gdisk dosfstools e2fsprogs kpartx grub-pc-bin grub-efi-amd64-bin grub2-common
 
 echo 'Setting up loopback device...'
-losetup -fP /out/$OUTPUT_BASENAME
-LOOPDEV=\$(losetup -j /out/$OUTPUT_BASENAME | cut -d: -f1)
+LOOPDEV=\$(losetup -f --show /out/$OUTPUT_BASENAME)
 echo \"  -> \$LOOPDEV\"
 
 echo 'Creating GPT partition table...'
@@ -68,17 +68,22 @@ sgdisk \\
   --new=2:0:+256M     --typecode=2:ef00 --change-name=2:'EFI System' \\
   --new=3:0:0          --typecode=3:8300 --change-name=3:'WINNIE' \\
   \"\$LOOPDEV\"
-partprobe \"\$LOOPDEV\"
-sleep 1
+
+# Create partition device mappings (losetup -P doesn't work in containers)
+echo 'Creating partition mappings...'
+kpartx -av \"\$LOOPDEV\"
+LOOPNAME=\$(basename \"\$LOOPDEV\")
+PART_EFI=\"/dev/mapper/\${LOOPNAME}p2\"
+PART_DATA=\"/dev/mapper/\${LOOPNAME}p3\"
 
 echo 'Formatting partitions...'
-mkfs.fat -F 32 -n EFI \"\${LOOPDEV}p2\"
-mkfs.ext4 -L WINNIE -q \"\${LOOPDEV}p3\"
+mkfs.fat -F 32 -n EFI \"\$PART_EFI\"
+mkfs.ext4 -L WINNIE -q \"\$PART_DATA\"
 
 MOUNT_DATA=\$(mktemp -d)
 MOUNT_EFI=\$(mktemp -d)
-mount \"\${LOOPDEV}p3\" \"\$MOUNT_DATA\"
-mount \"\${LOOPDEV}p2\" \"\$MOUNT_EFI\"
+mount \"\$PART_DATA\" \"\$MOUNT_DATA\"
+mount \"\$PART_EFI\" \"\$MOUNT_EFI\"
 
 echo 'Installing GRUB (Legacy BIOS)...'
 grub-install \\
@@ -107,6 +112,7 @@ fi
 
 echo 'Cleaning up...'
 umount \"\$MOUNT_EFI\" \"\$MOUNT_DATA\"
+kpartx -dv \"\$LOOPDEV\"
 losetup -d \"\$LOOPDEV\"
 
 echo 'Done.'
