@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+#MISE description="Inspect a winnie disk image (partitions, GRUB files, ISOs)"
+#USAGE flag "-i --image <path>" help="Disk image path" default="disk.img"
+set -euo pipefail
+
+IMAGE="${usage_image}"
+
+if [[ ! -f "$IMAGE" ]]; then
+  echo "Error: $IMAGE not found."
+  exit 1
+fi
+
+if ! command -v docker &>/dev/null || ! docker info &>/dev/null 2>&1; then
+  echo "Error: Docker is required for inspect."
+  exit 1
+fi
+
+docker run --rm --privileged --platform linux/amd64 \
+  -v "$(cd "$(dirname "$IMAGE")" && pwd)":/work:ro \
+  debian:bookworm bash -c "
+set -euo pipefail
+apt-get update -qq && apt-get install -y -qq kpartx gdisk dosfstools 2>&1 | tail -1
+
+# Copy image to writable location (losetup needs write access)
+cp /work/$(basename "$IMAGE") /tmp/disk.img
+LOOPDEV=\$(losetup -f --show /tmp/disk.img)
+kpartx -av \$LOOPDEV 2>/dev/null
+LOOPNAME=\$(basename \$LOOPDEV)
+
+echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
+echo 'winnie inspect: $(basename "$IMAGE")'
+echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
+
+echo ''
+echo '== Partition Table =='
+sgdisk -p \$LOOPDEV 2>/dev/null | tail -n +9
+
+echo ''
+echo '== EFI Partition =='
+mkdir -p /mnt/efi
+if mount /dev/mapper/\${LOOPNAME}p2 /mnt/efi 2>/dev/null; then
+  find /mnt/efi -type f | sed 's|^/mnt/efi|  |'
+  umount /mnt/efi
+else
+  echo '  (mount failed)'
+fi
+
+echo ''
+echo '== Data Partition =='
+mkdir -p /mnt/data
+if mount /dev/mapper/\${LOOPNAME}p3 /mnt/data 2>/dev/null; then
+  LABEL=\$(blkid -s LABEL -o value /dev/mapper/\${LOOPNAME}p3 2>/dev/null || echo '(none)')
+  echo \"  Label: \$LABEL\"
+
+  echo ''
+  echo '  GRUB:'
+  if [[ -f /mnt/data/boot/grub/grub.cfg ]]; then
+    echo '    grub.cfg: present'
+    distros=\$(grep -oP 'menuentry.*\\[\\K[A-Za-z/ ]+(?=\\])' /mnt/data/boot/grub/grub.cfg | sort -u | paste -sd ', ' || true)
+    echo \"    Detects: \$distros\"
+  else
+    echo '    grub.cfg: MISSING'
+  fi
+
+  echo '    Modules:'
+  for target in i386-pc x86_64-efi; do
+    if [[ -d /mnt/data/boot/grub/\$target ]]; then
+      count=\$(ls /mnt/data/boot/grub/\$target/*.mod 2>/dev/null | wc -l)
+      echo \"      \$target: \$count modules\"
+    else
+      echo \"      \$target: MISSING\"
+    fi
+  done
+
+  echo ''
+  echo '  ISOs:'
+  if ls /mnt/data/isos/*.iso /mnt/data/isos/*.ISO 2>/dev/null | head -1 >/dev/null 2>&1; then
+    for iso in /mnt/data/isos/*.iso /mnt/data/isos/*.ISO; do
+      [[ -f \"\$iso\" ]] || continue
+      name=\$(basename \"\$iso\")
+      size=\$(du -h \"\$iso\" | cut -f1)
+      printf '    %-50s %s\n' \"\$name\" \"\$size\"
+    done
+  else
+    echo '    (none)'
+  fi
+
+  umount /mnt/data
+else
+  echo '  (mount failed)'
+fi
+
+kpartx -d \$LOOPDEV 2>/dev/null
+losetup -d \$LOOPDEV
+" 2>&1
