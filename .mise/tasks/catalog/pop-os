@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+#MISE description="Show available Pop!_OS versions and variants"
+#USAGE flag "-v --version <version>" help="Show variants for a specific version"
+#USAGE flag "--json" help="Output as JSON"
+set -euo pipefail
+
+BUCKET="https://pop-iso.sfo2.digitaloceanspaces.com"
+API="https://api.pop-os.org/builds"
+VERSION="${usage_version:-}"
+JSON="${usage_json:-false}"
+
+# Run a command with a spinner if stderr is a TTY, otherwise run directly
+spin() {
+  local title="$1"; shift
+  if [[ -t 2 ]]; then
+    gum spin --show-output --title "$title" -- "$@"
+  else
+    "$@"
+  fi
+}
+
+# Parse S3 CommonPrefixes from XML (may be single-line)
+s3_prefixes() {
+  tr '<' '\n' | sed -n 's|^Prefix>\([^<]*\).*|\1|p' | sed 's|/$||'
+}
+
+fetch_version_detail() {
+  local channels parsed channel api_resp url sha256 size build
+  channels=$(curl -fsSL "$BUCKET/?list-type=2&delimiter=/&prefix=$VERSION/amd64/" | s3_prefixes | grep -v "^$VERSION/amd64$" | while read -r p; do basename "$p"; done)
+
+  if [[ -z "$channels" ]]; then
+    echo "Error: no channels found for Pop!_OS $VERSION." >&2
+    exit 1
+  fi
+
+  parsed=""
+  for channel in $channels; do
+    api_resp=$(curl -fsSL "$API/$VERSION/$channel?arch=amd64" 2>/dev/null || echo "")
+    url="" sha256="" size="0" build="unknown"
+    if [[ -n "$api_resp" ]] && echo "$api_resp" | grep -q '"url"'; then
+      url=$(echo "$api_resp" | jq -r '.url // ""')
+      sha256=$(echo "$api_resp" | jq -r '.sha_sum // ""')
+      size=$(echo "$api_resp" | jq -r '.size // 0')
+      build=$(echo "$api_resp" | jq -r '.build // "unknown"')
+    fi
+    parsed+="${channel}|${build}|${size}|${url}|${sha256}"$'\n'
+  done
+
+  echo -n "$parsed" | jq -R --arg version "$VERSION" '
+    split("|") | {
+      filename: ("pop-os_" + $version + "_amd64_" + .[0] + "_" + .[1] + ".iso"),
+      channel: .[0],
+      build: .[1],
+      size: (.[2] | tonumber),
+      url: .[3],
+      sha256: .[4]
+    }' | jq -s .
+}
+
+fetch_version_list() {
+  local raw versions parsed ver channels
+  raw=$(curl -fsSL "$BUCKET/?list-type=2&delimiter=/")
+  versions=$(echo "$raw" | s3_prefixes | grep -E '^[0-9]+\.[0-9]+$' | sort -t. -k1,1n -k2,2n)
+
+  parsed=""
+  for ver in $versions; do
+    channels=$(curl -fsSL "$BUCKET/?list-type=2&delimiter=/&prefix=$ver/amd64/" 2>/dev/null | s3_prefixes | grep -v "^$ver/amd64$" | while read -r p; do basename "$p"; done | paste -sd ',' -)
+    parsed+="${ver}|${channels}"$'\n'
+  done
+
+  echo -n "$parsed" | jq -R '
+    split("|") | {
+      version: .[0],
+      channels: (.[1] | split(","))
+    }' | jq -s .
+}
+
+if [[ -n "$VERSION" ]]; then
+  entries=$(spin "Fetching Pop!_OS $VERSION..." bash -c "$(declare -f s3_prefixes fetch_version_detail); VERSION='$VERSION' BUCKET='$BUCKET' API='$API' fetch_version_detail")
+
+  if [[ "$JSON" == "true" ]]; then
+    echo "$entries" | jq .
+  else
+    gum style --bold "Pop!_OS $VERSION"
+    echo ""
+    echo "$entries" | jq -r '["Channel","Build","Size"], (.[] | [.channel, .build, ((.size / 1024 / 1024 | floor | tostring) + "MB")]) | @csv' \
+      | tr -d '"' | gum table -p -w 12,8,10
+  fi
+else
+  entries=$(spin "Fetching Pop!_OS versions..." bash -c "$(declare -f s3_prefixes fetch_version_list); BUCKET='$BUCKET' fetch_version_list")
+
+  if [[ "$JSON" == "true" ]]; then
+    echo "$entries" | jq .
+  else
+    gum style --bold "Pop!_OS — available versions"
+    echo ""
+    echo "$entries" | jq -r '["Version","Channels"], (.[] | [.version, (.channels | join(" / "))]) | @csv' \
+      | tr -d '"' | gum table -p -w 10,30
+  fi
+fi

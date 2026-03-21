@@ -8,8 +8,6 @@ set -euo pipefail
 OUTPUT="${usage_output}"
 SIZE="${usage_size}"
 ISO="${usage_iso:-}"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # Preflight
 if ! command -v docker &>/dev/null; then
@@ -31,7 +29,7 @@ dd if=/dev/zero of="$OUTPUT" bs=1M count="$SIZE" status=progress 2>&1
 DOCKER_ARGS=(
   docker run --rm --privileged
   --platform linux/amd64
-  -v "$REPO_DIR":/repo:ro
+  -v "$MISE_CONFIG_ROOT":/repo:ro
   -v "$(cd "$(dirname "$OUTPUT")" && pwd)":/out
 )
 

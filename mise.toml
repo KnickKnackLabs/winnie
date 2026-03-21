@@ -1,4 +1,8 @@
+[settings]
+quiet = true
+
 [tools]
 bats = "1.13.0"
 usage = "latest"
 gum = "latest"
+jq = "latest"
