@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+#MISE description="Show available Linux Mint versions and variants"
+#USAGE flag "-v --version <version>" help="Show variants for a specific version"
+#USAGE flag "--json" help="Output as JSON"
+set -euo pipefail
+
+MIRROR="https://mirrors.edge.kernel.org/linuxmint/stable"
+VERSION="${usage_version:-}"
+JSON="${usage_json:-false}"
+
+source "$MISE_CONFIG_ROOT/lib/common.sh"
+
+fetch_version_detail() {
+  local html sha_content parsed
+  html=$(curl -fsSL "$MIRROR/$VERSION/") || { echo "Error: version $VERSION not found." >&2; exit 1; }
+  sha_content=$(curl -fsSL "$MIRROR/$VERSION/sha256sum.txt" 2>/dev/null || echo "")
+
+  mapfile -t isos < <(echo "$html" | sed -n 's/.*href="\([^"]*\.iso\)".*/\1/p')
+
+  if [[ ${#isos[@]} -eq 0 ]]; then
+    echo "No ISOs found for version $VERSION." >&2
+    exit 1
+  fi
+
+  parsed=""
+  for iso in "${isos[@]}"; do
+    variant="unknown"
+    case "$iso" in *cinnamon*) variant="cinnamon" ;; *mate*) variant="mate" ;; *xfce*) variant="xfce" ;; esac
+    arch="unknown"
+    case "$iso" in *64bit*) arch="64bit" ;; *32bit*) arch="32bit" ;; esac
+    sha256=""
+    if [[ -n "$sha_content" ]]; then
+      sha256=$(echo "$sha_content" | grep "$iso" | awk '{print $1}')
+    fi
+    parsed+="${iso}|${variant}|${arch}|${sha256}"$'\n'
+  done
+
+  echo -n "$parsed" | jq -R --arg mirror "$MIRROR" --arg version "$VERSION" '
+    split("|") | {
+      filename: .[0],
+      variant: .[1],
+      arch: .[2],
+      url: ($mirror + "/" + $version + "/" + .[0]),
+      sha256: .[3]
+    }' | jq -s .
+}
+
+fetch_version_list() {
+  local html parsed
+  html=$(curl -fsSL "$MIRROR/")
+
+  parsed=$(echo "$html" | sed -n 's/.*href="\([0-9][0-9.]*\)\/".* \([0-9]\{2\}-[A-Za-z]\{3\}-[0-9]\{4\}\).*/\1|\2/p')
+
+  echo "$parsed" | jq -R '
+    split("|") | {
+      version: .[0],
+      date: .[1],
+      variants: ["cinnamon", "mate", "xfce"]
+    }' | jq -s 'sort_by(.version | split(".") | map(tonumber))'
+}
+
+if [[ -n "$VERSION" ]]; then
+  entries=$(spin "Fetching Linux Mint $VERSION..." bash -c "$(declare -f fetch_version_detail); VERSION='$VERSION' MIRROR='$MIRROR' fetch_version_detail")
+
+  if [[ "$JSON" == "true" ]]; then
+    echo "$entries" | jq .
+  else
+    gum style --bold "Linux Mint $VERSION"
+    echo ""
+    echo "$entries" | jq -r '["Filename","Variant","Arch"], (.[] | [.filename, .variant, .arch]) | @csv' \
+      | tr -d '"' | gum table -p -w 50,12,8
+  fi
+else
+  entries=$(spin "Fetching Linux Mint versions..." bash -c "$(declare -f fetch_version_list); MIRROR='$MIRROR' fetch_version_list")
+
+  if [[ "$JSON" == "true" ]]; then
+    echo "$entries" | jq .
+  else
+    gum style --bold "Linux Mint — available versions"
+    echo ""
+    echo "$entries" | jq -r '["Version","Date","Variants"], (.[] | [.version, .date, (.variants | join(" / "))]) | @csv' \
+      | tr -d '"' | gum table -p -w 10,14,30
+  fi
+fi

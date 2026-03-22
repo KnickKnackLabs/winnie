@@ -4,21 +4,19 @@
 set -euo pipefail
 
 IMAGE="${usage_image}"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 if [[ ! -f "$IMAGE" ]]; then
-  echo "Error: $IMAGE not found. Create one with: winnie format-image"
+  echo "Error: $IMAGE not found. Create one with: winnie usb:format-image"
   exit 1
 fi
 
-if [[ ! -f "$REPO_DIR/grub/grub.cfg" ]]; then
+if [[ ! -f "$MISE_CONFIG_ROOT/grub/grub.cfg" ]]; then
   echo "Error: grub/grub.cfg not found in repo."
   exit 1
 fi
 
 docker run --rm --privileged --platform linux/amd64 \
-  -v "$REPO_DIR":/repo:ro \
+  -v "$MISE_CONFIG_ROOT":/repo:ro \
   -v "$(cd "$(dirname "$IMAGE")" && pwd)":/out \
   debian:bookworm bash -c "
 set -euo pipefail

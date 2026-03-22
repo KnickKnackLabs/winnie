@@ -107,4 +107,4 @@ install_"$PM"
 
 echo ""
 echo "Done. Re-run to verify:"
-echo "  mise run install-deps"
+echo "  mise run setup"

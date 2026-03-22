@@ -86,7 +86,7 @@ done
 if [[ $count -eq 0 ]]; then
   echo "  No ISOs found."
   echo ""
-  echo "  Add ISOs with: mise run add -d $DEVICE <iso-file>"
+  echo "  Add ISOs with: mise run usb:add -d $DEVICE <iso-file>"
 fi
 
 echo ""

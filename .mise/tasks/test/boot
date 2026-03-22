@@ -15,7 +15,7 @@ if [[ ! -f "$IMAGE" ]]; then
 fi
 
 if ! command -v qemu-system-x86_64 &>/dev/null; then
-  echo "Error: qemu-system-x86_64 not found. Run: winnie install-deps"
+  echo "Error: qemu-system-x86_64 not found. Run: winnie setup"
   exit 1
 fi
 

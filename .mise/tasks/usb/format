@@ -6,8 +6,6 @@ set -euo pipefail
 
 DEVICE="${usage_device}"
 SKIP_CONFIRM="${usage_yes:-false}"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 LABEL="WINNIE"
 BIOS_BOOT_SIZE="2M"
@@ -22,7 +20,7 @@ fi
 
 if [[ $EUID -ne 0 ]]; then
   echo "Error: format must run as root (need access to block devices)."
-  echo "Try: sudo mise run format -d $DEVICE"
+  echo "Try: sudo mise run usb:format -d $DEVICE"
   exit 1
 fi
 
@@ -150,7 +148,7 @@ grub-install \
 # ── Deploy config ─────────────────────────────────────────────────
 
 echo "Deploying grub.cfg..."
-cp "$REPO_DIR/grub/grub.cfg" "$MOUNT_DATA/boot/grub/grub.cfg"
+cp "$MISE_CONFIG_ROOT/grub/grub.cfg" "$MOUNT_DATA/boot/grub/grub.cfg"
 
 # ── Create ISO directory ──────────────────────────────────────────
 
@@ -168,4 +166,4 @@ echo "  2. Copy ISOs:               cp *.iso /mnt/isos/"
 echo "  3. Unmount:                  umount /mnt"
 echo "  4. Boot from USB!"
 echo ""
-echo "Or use: mise run add -d $DEVICE <iso-file>"
+echo "Or use: mise run usb:add -d $DEVICE <iso-file>"
