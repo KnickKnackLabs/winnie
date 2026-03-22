@@ -1,0 +1,201 @@
+#!/usr/bin/env bats
+
+# Tests for iso:get — argument validation, dedup, checksum verification.
+# Uses the mock-first overlay pattern for catalog mocks and PATH mocks for curl.
+
+WINNIE_DIR="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
+
+setup() {
+  export ISO_DIR="$BATS_TEST_TMPDIR/isos"
+  export WINNIE_ISO_DIR="$ISO_DIR"
+  mkdir -p "$ISO_DIR"
+
+  # Mock curl via PATH overlay
+  export MOCK_BIN="$BATS_TEST_TMPDIR/bin"
+  mkdir -p "$MOCK_BIN"
+  export ORIGINAL_PATH="$PATH"
+}
+
+teardown() {
+  export PATH="$ORIGINAL_PATH"
+}
+
+# --- mock helpers ---
+
+# Mock a catalog task to return canned JSON.
+# Uses mise's task_config includes — first include wins.
+mock_catalog() {
+  local distro="$1" json="$2"
+  local mock_dir="$BATS_TEST_TMPDIR/mocks/.mise/tasks/catalog"
+  mkdir -p "$mock_dir"
+  cat > "$mock_dir/$distro" <<SCRIPT
+#!/usr/bin/env bash
+echo '$json'
+SCRIPT
+  chmod +x "$mock_dir/$distro"
+}
+
+# Build overlay mise.toml: mocks first, then real tasks
+setup_overlay() {
+  export OVERLAY="$BATS_TEST_TMPDIR/overlay"
+  mkdir -p "$OVERLAY"
+  cat > "$OVERLAY/mise.toml" <<EOF
+[settings]
+quiet = true
+
+[tools]
+usage = "latest"
+gum = "latest"
+jq = "latest"
+
+[task_config]
+includes = [
+  "$BATS_TEST_TMPDIR/mocks/.mise/tasks",
+  "$WINNIE_DIR/.mise/tasks",
+]
+EOF
+  git -C "$OVERLAY" init -q -b main 2>/dev/null || true
+  mise trust "$OVERLAY/mise.toml" 2>/dev/null
+}
+
+# Mock curl to write specified content to the -o target
+mock_curl() {
+  local content="${1:-fake iso content}"
+  cat > "$MOCK_BIN/curl" <<SCRIPT
+#!/usr/bin/env bash
+while [[ \$# -gt 0 ]]; do
+  case "\$1" in
+    -o) shift; printf '%s' '$content' > "\$1"; exit 0 ;;
+    *) shift ;;
+  esac
+done
+exit 1
+SCRIPT
+  chmod +x "$MOCK_BIN/curl"
+  export PATH="$MOCK_BIN:$ORIGINAL_PATH"
+}
+
+# Run iso:get through the overlay
+run_iso_get() {
+  setup_overlay
+  WINNIE_ISO_DIR="$ISO_DIR" run mise -C "$OVERLAY" run -q iso:get -- "$@" 2>&1
+}
+
+# --- argument validation ---
+
+@test "iso:get rejects unsupported distro" {
+  run_iso_get "arch"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"unsupported distro"* ]]
+}
+
+@test "iso:get requires --version in non-interactive mode" {
+  mock_catalog "mint" '[{"version":"22","date":"2024-07-20","variants":["cinnamon","mate","xfce"]}]'
+  run_iso_get "mint"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"not a terminal"* ]]
+}
+
+# --- dedup: skip if already downloaded and verified ---
+
+@test "iso:get skips download if file exists with correct checksum" {
+  local content="fake iso content"
+  local sha256=$(printf '%s' "$content" | shasum -a 256 | awk '{print $1}')
+
+  printf '%s' "$content" > "$ISO_DIR/test.iso"
+
+  mock_catalog "mint" "[{\"filename\":\"test.iso\",\"variant\":\"cinnamon\",\"url\":\"http://example.com/test.iso\",\"sha256\":\"$sha256\"}]"
+
+  run_iso_get "mint" --version "22" --variant "cinnamon"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Already downloaded and verified"* ]]
+}
+
+@test "iso:get re-downloads if file exists with wrong checksum" {
+  printf '%s' "corrupted content" > "$ISO_DIR/test.iso"
+
+  local correct_content="correct iso content"
+  local correct_sha=$(printf '%s' "$correct_content" | shasum -a 256 | awk '{print $1}')
+
+  mock_catalog "mint" "[{\"filename\":\"test.iso\",\"variant\":\"cinnamon\",\"url\":\"http://example.com/test.iso\",\"sha256\":\"$correct_sha\"}]"
+  mock_curl "$correct_content"
+
+  run_iso_get "mint" --version "22" --variant "cinnamon"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"wrong checksum"* ]]
+  [[ "$output" == *"Verified"* ]]
+}
+
+# --- checksum verification ---
+
+@test "iso:get verifies sha256 after download" {
+  local content="verified iso content"
+  local sha256=$(printf '%s' "$content" | shasum -a 256 | awk '{print $1}')
+
+  mock_catalog "mint" "[{\"filename\":\"verified.iso\",\"variant\":\"cinnamon\",\"url\":\"http://example.com/verified.iso\",\"sha256\":\"$sha256\"}]"
+  mock_curl "$content"
+
+  run_iso_get "mint" --version "22" --variant "cinnamon"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Verified"* ]]
+  [ -f "$ISO_DIR/verified.iso" ]
+}
+
+@test "iso:get deletes file on checksum mismatch" {
+  mock_catalog "mint" "[{\"filename\":\"bad.iso\",\"variant\":\"cinnamon\",\"url\":\"http://example.com/bad.iso\",\"sha256\":\"0000000000000000000000000000000000000000000000000000000000000000\"}]"
+  mock_curl "some content"
+
+  run_iso_get "mint" --version "22" --variant "cinnamon"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"checksum mismatch"* ]]
+  [ ! -f "$ISO_DIR/bad.iso" ]
+}
+
+# --- force re-download ---
+
+@test "iso:get --force re-downloads even if file exists" {
+  local content="fresh content"
+  local sha256=$(printf '%s' "$content" | shasum -a 256 | awk '{print $1}')
+
+  printf '%s' "old content" > "$ISO_DIR/force.iso"
+
+  mock_catalog "mint" "[{\"filename\":\"force.iso\",\"variant\":\"cinnamon\",\"url\":\"http://example.com/force.iso\",\"sha256\":\"$sha256\"}]"
+  mock_curl "$content"
+
+  run_iso_get "mint" --version "22" --variant "cinnamon" --force
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Downloading"* ]]
+  [[ "$output" == *"Verified"* ]]
+}
+
+# --- iso store ---
+
+@test "iso:get creates store directory if it doesn't exist" {
+  rm -rf "$ISO_DIR"
+
+  local content="new dir content"
+  local sha256=$(printf '%s' "$content" | shasum -a 256 | awk '{print $1}')
+
+  mock_catalog "mint" "[{\"filename\":\"newdir.iso\",\"variant\":\"cinnamon\",\"url\":\"http://example.com/newdir.iso\",\"sha256\":\"$sha256\"}]"
+  mock_curl "$content"
+
+  run_iso_get "mint" --version "22" --variant "cinnamon"
+  [ "$status" -eq 0 ]
+  [ -d "$ISO_DIR" ]
+  [ -f "$ISO_DIR/newdir.iso" ]
+}
+
+# --- single variant auto-select ---
+
+@test "iso:get auto-selects when only one variant available" {
+  local content="single variant"
+  local sha256=$(printf '%s' "$content" | shasum -a 256 | awk '{print $1}')
+
+  mock_catalog "mint" "[{\"filename\":\"single.iso\",\"variant\":\"cinnamon\",\"url\":\"http://example.com/single.iso\",\"sha256\":\"$sha256\"}]"
+  mock_curl "$content"
+
+  # No --variant specified, but only one available — should auto-select
+  run_iso_get "mint" --version "22"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Verified"* ]]
+}
