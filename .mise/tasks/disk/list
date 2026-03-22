@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="List ISOs on a winnie USB drive"
+#MISE description="List ISOs on a winnie disk"
 #USAGE flag "-d --device <device>" help="Block device (e.g., /dev/sdb)" required
 set -euo pipefail
 
@@ -13,7 +13,7 @@ else
 fi
 
 if [[ ! -b "$PART_DATA" ]]; then
-  echo "Error: $PART_DATA not found. Is $DEVICE a winnie USB?"
+  echo "Error: $PART_DATA not found. Is $DEVICE a winnie disk?"
   exit 1
 fi
 
@@ -30,7 +30,7 @@ fi
 
 ISO_DIR="$MOUNT_POINT/isos"
 if [[ ! -d "$ISO_DIR" ]]; then
-  echo "No /isos directory found. Is $DEVICE a winnie USB?"
+  echo "No /isos directory found. Is $DEVICE a winnie disk?"
   exit 1
 fi
 
@@ -86,7 +86,7 @@ done
 if [[ $count -eq 0 ]]; then
   echo "  No ISOs found."
   echo ""
-  echo "  Add ISOs with: mise run usb:add -d $DEVICE <iso-file>"
+  echo "  Add ISOs with: mise run disk:add -d $DEVICE <iso-file>"
 fi
 
 echo ""

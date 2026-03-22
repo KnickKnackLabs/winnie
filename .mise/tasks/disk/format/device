@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-#MISE description="Format a USB drive as a winnie multiboot drive"
+#MISE description="Format a block device as a winnie multiboot drive"
+#MISE hide=true
 #USAGE flag "-d --device <device>" help="Block device (e.g., /dev/sdb)" required
 #USAGE flag "-y --yes" help="Skip confirmation prompt"
+#USAGE flag "--iso <path>" help="ISO file to pre-load after formatting"
 set -euo pipefail
 
 DEVICE="${usage_device}"
@@ -20,7 +22,7 @@ fi
 
 if [[ $EUID -ne 0 ]]; then
   echo "Error: format must run as root (need access to block devices)."
-  echo "Try: sudo mise run usb:format -d $DEVICE"
+  echo "Try: sudo mise run disk:format -d $DEVICE"
   exit 1
 fi
 
@@ -166,4 +168,4 @@ echo "  2. Copy ISOs:               cp *.iso /mnt/isos/"
 echo "  3. Unmount:                  umount /mnt"
 echo "  4. Boot from USB!"
 echo ""
-echo "Or use: mise run usb:add -d $DEVICE <iso-file>"
+echo "Or use: mise run disk:add -d $DEVICE <iso-file>"

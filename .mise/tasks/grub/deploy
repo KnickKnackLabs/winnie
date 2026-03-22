@@ -6,7 +6,7 @@ set -euo pipefail
 IMAGE="${usage_image}"
 
 if [[ ! -f "$IMAGE" ]]; then
-  echo "Error: $IMAGE not found. Create one with: winnie usb:format-image"
+  echo "Error: $IMAGE not found. Create one with: winnie disk:format --image disk.img"
   exit 1
 fi
 
