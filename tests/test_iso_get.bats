@@ -9,15 +9,6 @@ setup() {
   export ISO_DIR="$BATS_TEST_TMPDIR/isos"
   export WINNIE_ISO_DIR="$ISO_DIR"
   mkdir -p "$ISO_DIR"
-
-  # Mock curl via PATH overlay
-  export MOCK_BIN="$BATS_TEST_TMPDIR/bin"
-  mkdir -p "$MOCK_BIN"
-  export ORIGINAL_PATH="$PATH"
-}
-
-teardown() {
-  export PATH="$ORIGINAL_PATH"
 }
 
 # --- mock helpers ---
@@ -55,31 +46,39 @@ includes = [
   "$WINNIE_DIR/.mise/tasks",
 ]
 EOF
+  ln -sf "$WINNIE_DIR/lib" "$OVERLAY/lib"
   git -C "$OVERLAY" init -q -b main 2>/dev/null || true
   mise trust "$OVERLAY/mise.toml" 2>/dev/null
 }
 
-# Mock curl to write specified content to the -o target
+# Mock curl via ${CURL:-curl} env var injection.
+# Writes a mock script that copies content from a file to the -o target.
 mock_curl() {
   local content="${1:-fake iso content}"
-  cat > "$MOCK_BIN/curl" <<SCRIPT
+  local content_file="$BATS_TEST_TMPDIR/mock_curl_content"
+  local mock_script="$BATS_TEST_TMPDIR/mock_curl"
+  printf '%s' "$content" > "$content_file"
+  cat > "$mock_script" <<'SCRIPT'
 #!/usr/bin/env bash
-while [[ \$# -gt 0 ]]; do
-  case "\$1" in
-    -o) shift; printf '%s' '$content' > "\$1"; exit 0 ;;
+CONTENT_FILE="${MOCK_CURL_CONTENT_FILE:?}"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -o) shift; cp "$CONTENT_FILE" "$1"; exit 0 ;;
     *) shift ;;
   esac
 done
 exit 1
 SCRIPT
-  chmod +x "$MOCK_BIN/curl"
-  export PATH="$MOCK_BIN:$ORIGINAL_PATH"
+  chmod +x "$mock_script"
+  export MOCK_CURL_CONTENT_FILE="$content_file"
+  export CURL="$mock_script"
 }
 
 # Run iso:get through the overlay
 run_iso_get() {
   setup_overlay
-  WINNIE_ISO_DIR="$ISO_DIR" run mise -C "$OVERLAY" run -q iso:get -- "$@" 2>&1
+  WINNIE_ISO_DIR="$ISO_DIR" CURL="${CURL:-curl}" MOCK_CURL_CONTENT_FILE="${MOCK_CURL_CONTENT_FILE:-}" \
+    run mise -C "$OVERLAY" run -q iso:get -- "$@" 2>&1
 }
 
 # --- argument validation ---

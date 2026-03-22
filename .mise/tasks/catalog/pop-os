@@ -9,15 +9,7 @@ API="https://api.pop-os.org/builds"
 VERSION="${usage_version:-}"
 JSON="${usage_json:-false}"
 
-# Run a command with a spinner if stderr is a TTY, otherwise run directly
-spin() {
-  local title="$1"; shift
-  if [[ -t 2 ]]; then
-    gum spin --show-output --title "$title" -- "$@"
-  else
-    "$@"
-  fi
-}
+source "$MISE_CONFIG_ROOT/lib/common.sh"
 
 # Parse S3 CommonPrefixes from XML (may be single-line)
 s3_prefixes() {

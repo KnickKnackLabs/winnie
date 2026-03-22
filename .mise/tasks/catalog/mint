@@ -8,15 +8,7 @@ MIRROR="https://mirrors.edge.kernel.org/linuxmint/stable"
 VERSION="${usage_version:-}"
 JSON="${usage_json:-false}"
 
-# Run a command with a spinner if stderr is a TTY, otherwise run directly
-spin() {
-  local title="$1"; shift
-  if [[ -t 2 ]]; then
-    gum spin --show-output --title "$title" -- "$@"
-  else
-    "$@"
-  fi
-}
+source "$MISE_CONFIG_ROOT/lib/common.sh"
 
 fetch_version_detail() {
   local html sha_content parsed

@@ -16,14 +16,7 @@ mkdir -p "$ISO_DIR"
 
 # --- helpers ---
 
-spin() {
-  local title="$1"; shift
-  if [[ -t 2 ]]; then
-    gum spin --show-output --title "$title" -- "$@"
-  else
-    "$@"
-  fi
-}
+source "$MISE_CONFIG_ROOT/lib/common.sh"
 
 die() { echo "Error: $*" >&2; exit 1; }
 
@@ -113,7 +106,7 @@ echo ""
 
 CURL_ARGS=(-fL -o "$dest")
 [[ -t 1 ]] && CURL_ARGS+=(--progress-bar) || CURL_ARGS+=(-sS)
-curl "${CURL_ARGS[@]}" "$url" || die "download failed"
+${CURL:-curl} "${CURL_ARGS[@]}" "$url" || die "download failed"
 
 # --- verify ---
 
