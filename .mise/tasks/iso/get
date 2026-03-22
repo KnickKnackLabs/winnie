@@ -111,7 +111,9 @@ echo "  URL: $url"
 echo "  Dest: $dest"
 echo ""
 
-curl -fL --progress-bar -o "$dest" "$url" || die "download failed"
+CURL_ARGS=(-fL -o "$dest")
+[[ -t 1 ]] && CURL_ARGS+=(--progress-bar) || CURL_ARGS+=(-sS)
+curl "${CURL_ARGS[@]}" "$url" || die "download failed"
 
 # --- verify ---
 
