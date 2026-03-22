@@ -47,6 +47,7 @@ quiet = true
 usage = "latest"
 gum = "latest"
 jq = "latest"
+coreutils = "latest"
 
 [task_config]
 includes = [
@@ -100,7 +101,7 @@ run_iso_get() {
 
 @test "iso:get skips download if file exists with correct checksum" {
   local content="fake iso content"
-  local sha256=$(printf '%s' "$content" | shasum -a 256 | awk '{print $1}')
+  local sha256=$(printf '%s' "$content" | sha256sum | awk '{print $1}')
 
   printf '%s' "$content" > "$ISO_DIR/test.iso"
 
@@ -115,7 +116,7 @@ run_iso_get() {
   printf '%s' "corrupted content" > "$ISO_DIR/test.iso"
 
   local correct_content="correct iso content"
-  local correct_sha=$(printf '%s' "$correct_content" | shasum -a 256 | awk '{print $1}')
+  local correct_sha=$(printf '%s' "$correct_content" | sha256sum | awk '{print $1}')
 
   mock_catalog "mint" "[{\"filename\":\"test.iso\",\"variant\":\"cinnamon\",\"url\":\"http://example.com/test.iso\",\"sha256\":\"$correct_sha\"}]"
   mock_curl "$correct_content"
@@ -130,7 +131,7 @@ run_iso_get() {
 
 @test "iso:get verifies sha256 after download" {
   local content="verified iso content"
-  local sha256=$(printf '%s' "$content" | shasum -a 256 | awk '{print $1}')
+  local sha256=$(printf '%s' "$content" | sha256sum | awk '{print $1}')
 
   mock_catalog "mint" "[{\"filename\":\"verified.iso\",\"variant\":\"cinnamon\",\"url\":\"http://example.com/verified.iso\",\"sha256\":\"$sha256\"}]"
   mock_curl "$content"
@@ -155,7 +156,7 @@ run_iso_get() {
 
 @test "iso:get --force re-downloads even if file exists" {
   local content="fresh content"
-  local sha256=$(printf '%s' "$content" | shasum -a 256 | awk '{print $1}')
+  local sha256=$(printf '%s' "$content" | sha256sum | awk '{print $1}')
 
   printf '%s' "old content" > "$ISO_DIR/force.iso"
 
@@ -174,7 +175,7 @@ run_iso_get() {
   rm -rf "$ISO_DIR"
 
   local content="new dir content"
-  local sha256=$(printf '%s' "$content" | shasum -a 256 | awk '{print $1}')
+  local sha256=$(printf '%s' "$content" | sha256sum | awk '{print $1}')
 
   mock_catalog "mint" "[{\"filename\":\"newdir.iso\",\"variant\":\"cinnamon\",\"url\":\"http://example.com/newdir.iso\",\"sha256\":\"$sha256\"}]"
   mock_curl "$content"
@@ -189,7 +190,7 @@ run_iso_get() {
 
 @test "iso:get auto-selects when only one variant available" {
   local content="single variant"
-  local sha256=$(printf '%s' "$content" | shasum -a 256 | awk '{print $1}')
+  local sha256=$(printf '%s' "$content" | sha256sum | awk '{print $1}')
 
   mock_catalog "mint" "[{\"filename\":\"single.iso\",\"variant\":\"cinnamon\",\"url\":\"http://example.com/single.iso\",\"sha256\":\"$sha256\"}]"
   mock_curl "$content"

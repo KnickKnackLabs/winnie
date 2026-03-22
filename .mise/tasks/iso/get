@@ -91,7 +91,7 @@ dest="$ISO_DIR/$filename"
 
 if [[ -f "$dest" && "$FORCE" != "true" ]]; then
   if [[ -n "$sha256" && "$sha256" != "null" ]]; then
-    existing=$(sha256sum "$dest" 2>/dev/null | awk '{print $1}' || shasum -a 256 "$dest" 2>/dev/null | awk '{print $1}')
+    existing=$(sha256sum "$dest" | awk '{print $1}')
     if [[ "$existing" == "$sha256" ]]; then
       echo "Already downloaded and verified: $dest"
       exit 0
@@ -120,7 +120,7 @@ curl "${CURL_ARGS[@]}" "$url" || die "download failed"
 if [[ -n "$sha256" && "$sha256" != "null" ]]; then
   echo ""
   echo "Verifying SHA256..."
-  actual=$(sha256sum "$dest" 2>/dev/null | awk '{print $1}' || shasum -a 256 "$dest" 2>/dev/null | awk '{print $1}')
+  actual=$(sha256sum "$dest" | awk '{print $1}')
   if [[ "$actual" == "$sha256" ]]; then
     echo "  Verified: $actual"
   else
