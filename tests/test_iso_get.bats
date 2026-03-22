@@ -199,3 +199,40 @@ run_iso_get() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"Verified"* ]]
 }
+
+# --- pop-os (channel field instead of variant) ---
+
+@test "iso:get works with pop-os channel field" {
+  local content="pop os content"
+  local sha256=$(printf '%s' "$content" | sha256sum | awk '{print $1}')
+
+  mock_catalog "pop-os" "[{\"filename\":\"pop-os_22.04_amd64_intel.iso\",\"channel\":\"intel\",\"url\":\"http://example.com/pop.iso\",\"sha256\":\"$sha256\"}]"
+  mock_curl "$content"
+
+  run_iso_get "pop-os" --version "22.04" --variant "intel"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Verified"* ]]
+  [ -f "$ISO_DIR/pop-os_22.04_amd64_intel.iso" ]
+}
+
+# --- no checksum ---
+
+@test "iso:get skips verification when no checksum available" {
+  mock_catalog "mint" "[{\"filename\":\"nosha.iso\",\"variant\":\"cinnamon\",\"url\":\"http://example.com/nosha.iso\",\"sha256\":\"\"}]"
+  mock_curl "some content"
+
+  run_iso_get "mint" --version "22" --variant "cinnamon"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"No checksum available"* ]]
+  [ -f "$ISO_DIR/nosha.iso" ]
+}
+
+# --- multiple variants without --variant ---
+
+@test "iso:get requires --variant when multiple available in non-interactive mode" {
+  mock_catalog "mint" '[{"filename":"a.iso","variant":"cinnamon","url":"http://example.com/a.iso","sha256":"aaa"},{"filename":"b.iso","variant":"xfce","url":"http://example.com/b.iso","sha256":"bbb"}]'
+
+  run_iso_get "mint" --version "22"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"not a terminal"* ]]
+}
