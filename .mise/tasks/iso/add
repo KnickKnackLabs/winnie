@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+#MISE description="Add a local ISO file to the store"
+#USAGE arg "<file>" help="Path to ISO file"
+#USAGE flag "--link" help="Symlink instead of copy (saves disk space)"
+set -euo pipefail
+
+FILE="$usage_file"
+LINK="${usage_link:-false}"
+ISO_DIR="${WINNIE_ISO_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/winnie/isos}"
+
+mkdir -p "$ISO_DIR"
+
+if [[ ! -f "$FILE" ]]; then
+  echo "Error: $FILE does not exist." >&2
+  exit 1
+fi
+
+if [[ ! "$FILE" =~ \.(iso|ISO)$ ]]; then
+  echo "Warning: $FILE doesn't have an .iso extension." >&2
+fi
+
+# Resolve to absolute path for symlinks
+ABS_FILE=$(cd "$(dirname "$FILE")" && pwd)/$(basename "$FILE")
+FILENAME=$(basename "$FILE")
+DEST="$ISO_DIR/$FILENAME"
+
+if [[ -e "$DEST" ]]; then
+  echo "Error: $FILENAME already exists in the store." >&2
+  echo "  Use --force with iso:get to re-download, or remove it first:" >&2
+  echo "  rm $DEST" >&2
+  exit 1
+fi
+
+if [[ "$LINK" == "true" ]]; then
+  ln -s "$ABS_FILE" "$DEST"
+  echo "Linked $FILENAME → $ABS_FILE"
+else
+  echo "Copying $FILENAME to store..."
+  cp "$ABS_FILE" "$DEST"
+  echo "Added $FILENAME ($(( $(stat -f%z "$DEST" 2>/dev/null || stat -c%s "$DEST" 2>/dev/null) / 1024 / 1024 ))MB)"
+fi
+
+echo "  Store: $ISO_DIR"
