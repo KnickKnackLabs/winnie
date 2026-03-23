@@ -2,7 +2,7 @@
 
 # Tests for iso:extract — parse ISO grub.cfg, extract boot files, write manifest.
 
-WINNIE_DIR="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
+load test_helper
 
 # Detect 7z binary (7zz on macOS/brew, 7z on Linux)
 if command -v 7zz &>/dev/null; then
@@ -20,7 +20,6 @@ setup() {
 }
 
 # Helper: create a mock ISO with the given directory structure.
-# Usage: make_mock_iso <iso_path> <root_dir>
 make_mock_iso() {
   local iso_path="$1" root_dir="$2"
   mkisofs -quiet -o "$iso_path" -R "$root_dir" 2>/dev/null
@@ -48,10 +47,6 @@ EOF
   make_mock_iso "$iso_path" "$root"
 }
 
-run_iso_extract() {
-  run mise -C "$WINNIE_DIR" run -q iso:extract -- "$@" 2>&1
-}
-
 # --- prerequisites ---
 
 @test "mkisofs is available" {
@@ -66,7 +61,7 @@ run_iso_extract() {
 
 @test "iso:extract reads grub.cfg from ISO" {
   make_casper_iso "$TEST_DIR/test.iso"
-  run_iso_extract "$TEST_DIR/test.iso" --output "$OUTPUT_DIR"
+  run winnie iso:extract -- "$TEST_DIR/test.iso" --output "$OUTPUT_DIR"
   [ "$status" -eq 0 ]
   [ -f "$OUTPUT_DIR/manifest.json" ]
   # manifest should contain the menu entry title
@@ -75,7 +70,7 @@ run_iso_extract() {
 
 @test "iso:extract parses kernel path from grub.cfg" {
   make_casper_iso "$TEST_DIR/test.iso"
-  run_iso_extract "$TEST_DIR/test.iso" --output "$OUTPUT_DIR"
+  run winnie iso:extract -- "$TEST_DIR/test.iso" --output "$OUTPUT_DIR"
   [ "$status" -eq 0 ]
   # manifest should have the kernel path
   jq -e '.kernel_path' "$OUTPUT_DIR/manifest.json" | grep -q "casper/vmlinuz"
@@ -83,14 +78,14 @@ run_iso_extract() {
 
 @test "iso:extract parses initrd path from grub.cfg" {
   make_casper_iso "$TEST_DIR/test.iso"
-  run_iso_extract "$TEST_DIR/test.iso" --output "$OUTPUT_DIR"
+  run winnie iso:extract -- "$TEST_DIR/test.iso" --output "$OUTPUT_DIR"
   [ "$status" -eq 0 ]
   jq -e '.initrd_path' "$OUTPUT_DIR/manifest.json" | grep -q "casper/initrd"
 }
 
 @test "iso:extract parses boot params from grub.cfg" {
   make_casper_iso "$TEST_DIR/test.iso"
-  run_iso_extract "$TEST_DIR/test.iso" --output "$OUTPUT_DIR"
+  run winnie iso:extract -- "$TEST_DIR/test.iso" --output "$OUTPUT_DIR"
   [ "$status" -eq 0 ]
   jq -e '.boot_params' "$OUTPUT_DIR/manifest.json" | grep -q "boot=casper"
   jq -e '.boot_params' "$OUTPUT_DIR/manifest.json" | grep -q "live-media-path="
@@ -100,7 +95,7 @@ run_iso_extract() {
 
 @test "iso:extract extracts vmlinuz" {
   make_casper_iso "$TEST_DIR/test.iso"
-  run_iso_extract "$TEST_DIR/test.iso" --output "$OUTPUT_DIR"
+  run winnie iso:extract -- "$TEST_DIR/test.iso" --output "$OUTPUT_DIR"
   [ "$status" -eq 0 ]
   [ -f "$OUTPUT_DIR/vmlinuz" ]
   grep -q "fake-kernel-data" "$OUTPUT_DIR/vmlinuz"
@@ -108,7 +103,7 @@ run_iso_extract() {
 
 @test "iso:extract extracts initrd" {
   make_casper_iso "$TEST_DIR/test.iso"
-  run_iso_extract "$TEST_DIR/test.iso" --output "$OUTPUT_DIR"
+  run winnie iso:extract -- "$TEST_DIR/test.iso" --output "$OUTPUT_DIR"
   [ "$status" -eq 0 ]
   [ -f "$OUTPUT_DIR/initrd" ]
   grep -q "fake-initrd-data" "$OUTPUT_DIR/initrd"
@@ -116,7 +111,7 @@ run_iso_extract() {
 
 @test "iso:extract extracts squashfs" {
   make_casper_iso "$TEST_DIR/test.iso"
-  run_iso_extract "$TEST_DIR/test.iso" --output "$OUTPUT_DIR"
+  run winnie iso:extract -- "$TEST_DIR/test.iso" --output "$OUTPUT_DIR"
   [ "$status" -eq 0 ]
   [ -f "$OUTPUT_DIR/filesystem.squashfs" ]
   grep -q "fake-squashfs-data" "$OUTPUT_DIR/filesystem.squashfs"
@@ -126,14 +121,14 @@ run_iso_extract() {
 
 @test "iso:extract writes valid JSON manifest" {
   make_casper_iso "$TEST_DIR/test.iso"
-  run_iso_extract "$TEST_DIR/test.iso" --output "$OUTPUT_DIR"
+  run winnie iso:extract -- "$TEST_DIR/test.iso" --output "$OUTPUT_DIR"
   [ "$status" -eq 0 ]
   jq empty "$OUTPUT_DIR/manifest.json"
 }
 
 @test "iso:extract manifest contains menu title" {
   make_casper_iso "$TEST_DIR/test.iso"
-  run_iso_extract "$TEST_DIR/test.iso" --output "$OUTPUT_DIR"
+  run winnie iso:extract -- "$TEST_DIR/test.iso" --output "$OUTPUT_DIR"
   [ "$status" -eq 0 ]
   [[ "$(jq -r '.title' "$OUTPUT_DIR/manifest.json")" == "Test Linux" ]]
 }
@@ -142,7 +137,7 @@ run_iso_extract() {
 
 @test "iso:extract handles Pop!_OS casper directory naming" {
   make_casper_iso "$TEST_DIR/test.iso" "casper_pop-os_24.04_amd64_generic_debug_481"
-  run_iso_extract "$TEST_DIR/test.iso" --output "$OUTPUT_DIR"
+  run winnie iso:extract -- "$TEST_DIR/test.iso" --output "$OUTPUT_DIR"
   [ "$status" -eq 0 ]
   [ -f "$OUTPUT_DIR/vmlinuz" ]
   [ -f "$OUTPUT_DIR/initrd" ]
@@ -166,7 +161,7 @@ menuentry "Debian Live" {
 EOF
 
   make_mock_iso "$TEST_DIR/test.iso" "$root"
-  run_iso_extract "$TEST_DIR/test.iso" --output "$OUTPUT_DIR"
+  run winnie iso:extract -- "$TEST_DIR/test.iso" --output "$OUTPUT_DIR"
   [ "$status" -eq 0 ]
   [ -f "$OUTPUT_DIR/vmlinuz" ]
   [ -f "$OUTPUT_DIR/initrd.img" ]
@@ -175,7 +170,7 @@ EOF
 # --- error handling ---
 
 @test "iso:extract fails if ISO doesn't exist" {
-  run_iso_extract "/nonexistent.iso" --output "$OUTPUT_DIR"
+  run winnie iso:extract -- "/nonexistent.iso" --output "$OUTPUT_DIR"
   [ "$status" -ne 0 ]
   [[ "$output" == *"does not exist"* ]]
 }
@@ -187,7 +182,7 @@ EOF
   echo "just a file" > "$root/readme.txt"
   make_mock_iso "$TEST_DIR/test.iso" "$root"
 
-  run_iso_extract "$TEST_DIR/test.iso" --output "$OUTPUT_DIR"
+  run winnie iso:extract -- "$TEST_DIR/test.iso" --output "$OUTPUT_DIR"
   [ "$status" -ne 0 ]
   [[ "$output" == *"grub.cfg"* ]]
 }
@@ -199,14 +194,14 @@ EOF
   echo "set timeout=10" > "$root/boot/grub/grub.cfg"
   make_mock_iso "$TEST_DIR/test.iso" "$root"
 
-  run_iso_extract "$TEST_DIR/test.iso" --output "$OUTPUT_DIR"
+  run winnie iso:extract -- "$TEST_DIR/test.iso" --output "$OUTPUT_DIR"
   [ "$status" -ne 0 ]
   [[ "$output" == *"menuentry"* ]]
 }
 
 @test "iso:extract creates output directory if it doesn't exist" {
   make_casper_iso "$TEST_DIR/test.iso"
-  run_iso_extract "$TEST_DIR/test.iso" --output "$TEST_DIR/newdir/extract"
+  run winnie iso:extract -- "$TEST_DIR/test.iso" --output "$TEST_DIR/newdir/extract"
   [ "$status" -eq 0 ]
   [ -d "$TEST_DIR/newdir/extract" ]
   [ -f "$TEST_DIR/newdir/extract/manifest.json" ]

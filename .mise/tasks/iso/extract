@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+#MISE description="Extract boot files from an ISO and write a manifest"
+#USAGE arg "<iso>" help="Path to ISO file"
+#USAGE flag "-o --output <dir>" help="Output directory for extracted files" required
+set -euo pipefail
+
+ISO="$usage_iso"
+OUTPUT="$usage_output"
+
+if [[ ! -f "$ISO" ]]; then
+  echo "Error: $ISO does not exist." >&2
+  exit 1
+fi
+
+# Detect 7z binary
+if command -v 7zz &>/dev/null; then
+  SEVENZIP=7zz
+elif command -v 7z &>/dev/null; then
+  SEVENZIP=7z
+else
+  echo "Error: 7z/7zz not found. Run: mise run setup" >&2
+  exit 1
+fi
+
+mkdir -p "$OUTPUT"
+
+WORK=$(mktemp -d)
+trap 'rm -rf "$WORK"' EXIT
+
+# --- Step 1: Extract grub.cfg from ISO ---
+
+"$SEVENZIP" e "$ISO" boot/grub/grub.cfg -o"$WORK" -y >/dev/null 2>&1
+if [[ ! -f "$WORK/grub.cfg" ]]; then
+  echo "Error: no boot/grub/grub.cfg found in ISO." >&2
+  exit 1
+fi
+
+GRUB_CFG="$WORK/grub.cfg"
+
+# --- Step 2: Parse first menuentry ---
+
+TITLE=$(grep -m1 '^menuentry' "$GRUB_CFG" | sed 's/^menuentry[[:space:]]*"\([^"]*\)".*/\1/' || true)
+if [[ -z "$TITLE" ]]; then
+  echo "Error: no menuentry found in grub.cfg." >&2
+  exit 1
+fi
+
+# Find the linux and initrd lines within the first menuentry block
+LINUX_LINE=$(sed -n '/^menuentry/,/^}/{ /^[[:space:]]*linux[[:space:]]/p; }' "$GRUB_CFG" | head -1)
+INITRD_LINE=$(sed -n '/^menuentry/,/^}/{ /^[[:space:]]*initrd[[:space:]]/p; }' "$GRUB_CFG" | head -1)
+
+if [[ -z "$LINUX_LINE" ]]; then
+  echo "Error: no linux line found in menuentry." >&2
+  exit 1
+fi
+
+# Parse kernel path (first arg after 'linux') — strip leading /
+KERNEL_PATH=$(echo "$LINUX_LINE" | awk '{print $2}' | sed 's|^/||')
+
+# Parse boot params (everything after the kernel path)
+BOOT_PARAMS=$(echo "$LINUX_LINE" | sed 's/^[[:space:]]*linux[[:space:]]*[^[:space:]]*//' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*---[[:space:]]*$//')
+
+# Parse initrd path — strip leading /
+INITRD_PATH=""
+if [[ -n "$INITRD_LINE" ]]; then
+  INITRD_PATH=$(echo "$INITRD_LINE" | awk '{print $2}' | sed 's|^/||')
+fi
+
+# --- Step 3: Find and extract squashfs ---
+
+# Look for squashfs files in the ISO
+SQUASHFS_PATH=$("$SEVENZIP" l "$ISO" 2>/dev/null | grep -i '\.squashfs' | awk '{print $NF}' | head -1)
+
+# --- Step 4: Extract boot files ---
+
+KERNEL_FILENAME=$(basename "$KERNEL_PATH")
+"$SEVENZIP" e "$ISO" "$KERNEL_PATH" -o"$OUTPUT" -y >/dev/null 2>&1
+
+if [[ -n "$INITRD_PATH" ]]; then
+  INITRD_FILENAME=$(basename "$INITRD_PATH")
+  "$SEVENZIP" e "$ISO" "$INITRD_PATH" -o"$OUTPUT" -y >/dev/null 2>&1
+fi
+
+if [[ -n "$SQUASHFS_PATH" ]]; then
+  SQUASHFS_FILENAME=$(basename "$SQUASHFS_PATH")
+  "$SEVENZIP" e "$ISO" "$SQUASHFS_PATH" -o"$OUTPUT" -y >/dev/null 2>&1
+fi
+
+# --- Step 5: Write manifest ---
+
+jq -n \
+  --arg title "$TITLE" \
+  --arg kernel_path "$KERNEL_PATH" \
+  --arg initrd_path "${INITRD_PATH:-}" \
+  --arg boot_params "$BOOT_PARAMS" \
+  --arg squashfs_path "${SQUASHFS_PATH:-}" \
+  '{
+    title: $title,
+    kernel_path: $kernel_path,
+    initrd_path: $initrd_path,
+    boot_params: $boot_params,
+    squashfs_path: $squashfs_path
+  }' > "$OUTPUT/manifest.json"
+
+echo "Extracted: $TITLE"
+echo "  Kernel:   $KERNEL_FILENAME"
+[[ -n "$INITRD_PATH" ]] && echo "  Initrd:   $INITRD_FILENAME"
+[[ -n "$SQUASHFS_PATH" ]] && echo "  Squashfs: $SQUASHFS_FILENAME"
+echo "  Manifest: $OUTPUT/manifest.json"
