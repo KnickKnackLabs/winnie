@@ -79,10 +79,7 @@ grub-install \\
   --efi-directory=\"\$MOUNT_EFI\" \\
   --removable
 
-echo 'Deploying grub.cfg...'
-cp /repo/grub/grub.cfg \"\$MOUNT_DATA/boot/grub/grub.cfg\"
-
-mkdir -p \"\$MOUNT_DATA/isos\"
+mkdir -p \"\$MOUNT_DATA/distros\"
 
 sync
 echo 'Cleaning up...'

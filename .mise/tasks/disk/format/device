@@ -146,14 +146,9 @@ grub-install \
   --efi-directory="$MOUNT_EFI" \
   --removable
 
-# ── Deploy config ─────────────────────────────────────────────────
+# ── Create distros directory ──────────────────────────────────────
 
-echo "Deploying grub.cfg..."
-cp "$MISE_CONFIG_ROOT/grub/grub.cfg" "$MOUNT_DATA/boot/grub/grub.cfg"
-
-# ── Create ISO directory ──────────────────────────────────────────
-
-mkdir -p "$MOUNT_DATA/isos"
+mkdir -p "$MOUNT_DATA/distros"
 
 # ── Done ──────────────────────────────────────────────────────────
 
@@ -162,9 +157,6 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "winnie: $DEVICE is ready!"
 echo ""
 echo "Next steps:"
-echo "  1. Mount the data partition: mount $PART_DATA /mnt"
-echo "  2. Copy ISOs:               cp *.iso /mnt/isos/"
-echo "  3. Unmount:                  umount /mnt"
-echo "  4. Boot from USB!"
+echo "  winnie disk:add <iso-file> -d $DEVICE"
 echo ""
-echo "Or use: mise run disk:add -d $DEVICE <iso-file>"
+echo "Boot from USB when done."
