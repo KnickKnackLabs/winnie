@@ -3,12 +3,10 @@
 #MISE hide=true
 #USAGE flag "-i --image <path>" help="Output image path" default="disk.img"
 #USAGE flag "-s --size <size>" help="Image size in MB" default="2048"
-#USAGE flag "--iso <path>" help="Optional: ISO file to pre-load onto the image"
 set -euo pipefail
 
 OUTPUT="${usage_image}"
 SIZE="${usage_size}"
-ISO="${usage_iso:-}"
 
 # Preflight
 if ! command -v docker &>/dev/null; then
@@ -26,30 +24,13 @@ fi
 echo "Creating ${SIZE}MB raw disk image at $OUTPUT..."
 dd if=/dev/zero of="$OUTPUT" bs=1M count="$SIZE" status=progress 2>&1
 
-# Build Docker command
-DOCKER_ARGS=(
-  docker run --rm --privileged
-  --platform linux/amd64
-  -v "$MISE_CONFIG_ROOT":/repo:ro
-  -v "$(cd "$(dirname "$OUTPUT")" && pwd)":/out
-)
-
-# Mount ISO if provided
-if [[ -n "$ISO" ]]; then
-  if [[ ! -f "$ISO" ]]; then
-    echo "Error: ISO file not found: $ISO"
-    rm -f "$OUTPUT"
-    exit 1
-  fi
-  DOCKER_ARGS+=(-v "$(cd "$(dirname "$ISO")" && pwd)":/iso:ro)
-  ISO_BASENAME="$(basename "$ISO")"
-else
-  ISO_BASENAME=""
-fi
-
 OUTPUT_BASENAME="$(basename "$OUTPUT")"
 
-"${DOCKER_ARGS[@]}" debian:bookworm bash -c "
+docker run --rm --privileged \
+  --platform linux/amd64 \
+  -v "$MISE_CONFIG_ROOT":/repo:ro \
+  -v "$(cd "$(dirname "$OUTPUT")" && pwd)":/out \
+  debian:bookworm bash -c "
 set -euo pipefail
 
 echo 'Installing tools...'
@@ -103,13 +84,6 @@ cp /repo/grub/grub.cfg \"\$MOUNT_DATA/boot/grub/grub.cfg\"
 
 mkdir -p \"\$MOUNT_DATA/isos\"
 
-# Copy ISO if provided
-if [[ -n '$ISO_BASENAME' ]] && [[ -f '/iso/$ISO_BASENAME' ]]; then
-  echo 'Copying ISO to image...'
-  cp '/iso/$ISO_BASENAME' \"\$MOUNT_DATA/isos/\"
-  ls -lh \"\$MOUNT_DATA/isos/\"
-fi
-
 sync
 echo 'Cleaning up...'
 umount \"\$MOUNT_EFI\" \"\$MOUNT_DATA\"
@@ -123,9 +97,8 @@ echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "Image ready: $OUTPUT"
 echo ""
-echo "Boot with QEMU:"
-echo "  # BIOS mode"
-echo "  qemu-system-x86_64 -m 512 -drive file=$OUTPUT,format=raw -boot c"
+echo "Add ISOs with:"
+echo "  winnie disk:add <iso-file> --image $OUTPUT"
 echo ""
-echo "  # UEFI mode (macOS)"
-echo "  qemu-system-x86_64 -m 512 -bios \$(brew --prefix)/share/qemu/edk2-x86_64-code.fd -drive file=$OUTPUT,format=raw -boot c"
+echo "Boot with QEMU:"
+echo "  winnie vm:boot --image $OUTPUT --uefi"

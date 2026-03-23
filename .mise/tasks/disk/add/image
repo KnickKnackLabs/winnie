@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+#MISE description="Copy an ISO file onto a winnie disk image"
+#MISE hide=true
+#USAGE arg "<iso>" help="Path to ISO file to add"
+#USAGE flag "-i --image <path>" help="Disk image path" required
+set -euo pipefail
+
+ISO="${usage_iso}"
+IMAGE="${usage_image}"
+
+if [[ ! -f "$ISO" ]]; then
+  echo "Error: $ISO does not exist or is not a file." >&2
+  exit 1
+fi
+
+if [[ ! -f "$IMAGE" ]]; then
+  echo "Error: $IMAGE does not exist or is not a file." >&2
+  exit 1
+fi
+
+# Check if ISO fits in image (rough check — ISO should be smaller than image)
+ISO_SIZE=$(stat -f%z "$ISO" 2>/dev/null || stat -c%s "$ISO" 2>/dev/null)
+IMAGE_SIZE=$(stat -f%z "$IMAGE" 2>/dev/null || stat -c%s "$IMAGE" 2>/dev/null)
+
+if [[ "$ISO_SIZE" -ge "$IMAGE_SIZE" ]]; then
+  echo "Error: not enough space — ISO ($(( ISO_SIZE / 1048576 ))MB) is larger than image ($(( IMAGE_SIZE / 1048576 ))MB)." >&2
+  exit 1
+fi
+
+if ! command -v docker &>/dev/null; then
+  echo "Error: docker is required for disk:add --image."
+  echo "Install Docker Desktop or Docker Engine."
+  exit 1
+fi
+
+if ! docker info &>/dev/null 2>&1; then
+  echo "Error: Docker daemon is not running."
+  exit 1
+fi
+
+ISO_BASENAME="$(basename "$ISO")"
+IMAGE_BASENAME="$(basename "$IMAGE")"
+
+echo "Adding $ISO_BASENAME to $IMAGE_BASENAME..."
+
+docker run --rm --privileged \
+  --platform linux/amd64 \
+  -v "$(cd "$(dirname "$IMAGE")" && pwd)":/out \
+  -v "$(cd "$(dirname "$ISO")" && pwd)":/iso:ro \
+  debian:bookworm bash -c "
+set -euo pipefail
+
+apt-get update -qq
+apt-get install -y -qq kpartx >/dev/null 2>&1
+
+LOOPDEV=\$(losetup -f --show /out/$IMAGE_BASENAME)
+kpartx -av \"\$LOOPDEV\" >/dev/null 2>&1
+LOOPNAME=\$(basename \"\$LOOPDEV\")
+PART_DATA=\"/dev/mapper/\${LOOPNAME}p3\"
+
+MOUNT_DATA=\$(mktemp -d)
+mount \"\$PART_DATA\" \"\$MOUNT_DATA\"
+
+if [[ -f \"\$MOUNT_DATA/isos/$ISO_BASENAME\" ]]; then
+  echo '$ISO_BASENAME already exists on the image.'
+  umount \"\$MOUNT_DATA\"
+  kpartx -dv \"\$LOOPDEV\" >/dev/null 2>&1
+  losetup -d \"\$LOOPDEV\"
+  exit 1
+fi
+
+echo 'Copying ISO...'
+cp '/iso/$ISO_BASENAME' \"\$MOUNT_DATA/isos/\"
+echo 'ISOs on image:'
+ls -lh \"\$MOUNT_DATA/isos/\"
+
+sync
+umount \"\$MOUNT_DATA\"
+kpartx -dv \"\$LOOPDEV\" >/dev/null 2>&1
+losetup -d \"\$LOOPDEV\"
+echo 'Done.'
+"

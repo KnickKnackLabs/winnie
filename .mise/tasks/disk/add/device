@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-#MISE description="Copy an ISO file onto a winnie disk"
+#MISE description="Copy an ISO file onto a block device"
+#MISE hide=true
 #USAGE arg "<iso>" help="Path to ISO file to add"
 #USAGE flag "-d --device <device>" help="Block device (e.g., /dev/sdb)" required
 set -euo pipefail

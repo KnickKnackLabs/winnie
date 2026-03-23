@@ -3,7 +3,6 @@
 #MISE hide=true
 #USAGE flag "-d --device <device>" help="Block device (e.g., /dev/sdb)" required
 #USAGE flag "-y --yes" help="Skip confirmation prompt"
-#USAGE flag "--iso <path>" help="ISO file to pre-load after formatting"
 set -euo pipefail
 
 DEVICE="${usage_device}"
