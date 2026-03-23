@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+#MISE description="Format a device or image as a winnie multiboot drive"
+#USAGE flag "-d --device <device>" help="Block device (e.g., /dev/sdb)"
+#USAGE flag "-i --image <path>" help="Disk image path (creates if needed)"
+#USAGE flag "-s --size <size>" help="Image size in MB (with --image)" default="2048"
+#USAGE flag "--iso <path>" help="ISO file to pre-load onto the disk"
+#USAGE flag "-y --yes" help="Skip confirmation prompt"
+set -euo pipefail
+
+DEVICE="${usage_device:-}"
+IMAGE="${usage_image:-}"
+
+if [[ -n "$DEVICE" && -n "$IMAGE" ]]; then
+  echo "Error: specify --device or --image, not both." >&2
+  exit 1
+fi
+
+if [[ -z "$DEVICE" && -z "$IMAGE" ]]; then
+  echo "Error: specify --device <block-device> or --image <path>." >&2
+  echo "" >&2
+  echo "  disk:format --device /dev/sdb       Format a real USB drive" >&2
+  echo "  disk:format --image disk.img        Create a virtual disk image" >&2
+  exit 1
+fi
+
+if [[ -n "$DEVICE" ]]; then
+  ARGS=("--device" "$DEVICE")
+  [[ "${usage_yes:-false}" == "true" ]] && ARGS+=("--yes")
+  [[ -n "${usage_iso:-}" ]] && ARGS+=("--iso" "$usage_iso")
+  mise run -q disk:format:device -- "${ARGS[@]}"
+else
+  ARGS=("--image" "$IMAGE" "--size" "${usage_size}")
+  [[ -n "${usage_iso:-}" ]] && ARGS+=("--iso" "$usage_iso")
+  mise run -q disk:format:image -- "${ARGS[@]}"
+fi

@@ -13,7 +13,7 @@ MEMORY="${usage_memory}"
 
 if [[ ! -f "$IMAGE" ]]; then
   echo "Error: $IMAGE not found."
-  echo "Create one with: winnie usb:format-image"
+  echo "Create one with: winnie disk:format --image disk.img"
   exit 1
 fi
 

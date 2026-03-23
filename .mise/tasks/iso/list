@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+#MISE description="List ISOs in the local store"
+#USAGE flag "--json" help="Output as JSON"
+set -euo pipefail
+
+source "$MISE_CONFIG_ROOT/lib/common.sh"
+
+JSON="${usage_json:-false}"
+ISO_DIR="${WINNIE_ISO_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/winnie/isos}"
+
+if [[ ! -d "$ISO_DIR" ]] || ! ls "$ISO_DIR"/*.iso &>/dev/null; then
+  if [[ "$JSON" == "true" ]]; then
+    echo "[]"
+  else
+    echo "No ISOs in store."
+    echo "  Download with: winnie iso:get <distro>"
+    echo "  Or add manually: winnie iso:add <path>"
+  fi
+  exit 0
+fi
+
+rows=()
+for f in "$ISO_DIR"/*.iso; do
+  filename=$(basename "$f")
+  size=$(stat -f%z "$f" 2>/dev/null || stat -c%s "$f" 2>/dev/null || echo "0")
+  size_mb=$(( size / 1024 / 1024 ))
+  sha256=$(sha256sum "$f" | awk '{print $1}')
+  rows+=("$(printf '%s\t%s\t%s\t%s' "$filename" "${size_mb}MB" "$sha256" "$f")")
+done
+
+if [[ "$JSON" == "true" ]]; then
+  printf '%s\n' "${rows[@]}" | jq -R '
+    split("\t") | {
+      filename: .[0],
+      size: .[1],
+      sha256: .[2],
+      path: .[3]
+    }' | jq -s .
+else
+  gum style --bold "ISOs in store ($ISO_DIR)"
+  echo ""
+  {
+    printf 'Filename\tSize\tSHA256\n'
+    printf '%s\n' "${rows[@]}" | awk -F'\t' '{printf "%s\t%s\t%.12s…\n", $1, $2, $3}'
+  } | gum table -p --separator "	"
+fi
