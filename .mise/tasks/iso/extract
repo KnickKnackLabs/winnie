@@ -12,13 +12,8 @@ if [[ ! -f "$ISO" ]]; then
   exit 1
 fi
 
-# Detect 7z binary
-if command -v 7zz &>/dev/null; then
-  SEVENZIP=7zz
-elif command -v 7z &>/dev/null; then
-  SEVENZIP=7z
-else
-  echo "Error: 7z/7zz not found. Run: mise run setup" >&2
+if ! command -v 7zz &>/dev/null; then
+  echo "Error: 7zz not found. Run: mise install" >&2
   exit 1
 fi
 
@@ -29,7 +24,7 @@ trap 'rm -rf "$WORK"' EXIT
 
 # --- Step 1: Extract grub.cfg from ISO ---
 
-"$SEVENZIP" e "$ISO" boot/grub/grub.cfg -o"$WORK" -y >/dev/null 2>&1
+7zz e "$ISO" boot/grub/grub.cfg -o"$WORK" -y >/dev/null 2>&1
 if [[ ! -f "$WORK/grub.cfg" ]]; then
   echo "Error: no boot/grub/grub.cfg found in ISO." >&2
   exit 1
@@ -69,21 +64,21 @@ fi
 # --- Step 3: Find and extract squashfs ---
 
 # Look for squashfs files in the ISO
-SQUASHFS_PATH=$("$SEVENZIP" l "$ISO" 2>/dev/null | grep -i '\.squashfs' | awk '{print $NF}' | head -1)
+SQUASHFS_PATH=$(7zz l "$ISO" 2>/dev/null | grep -i '\.squashfs' | awk '{print $NF}' | head -1 || true)
 
 # --- Step 4: Extract boot files ---
 
 KERNEL_FILENAME=$(basename "$KERNEL_PATH")
-"$SEVENZIP" e "$ISO" "$KERNEL_PATH" -o"$OUTPUT" -y >/dev/null 2>&1
+7zz e "$ISO" "$KERNEL_PATH" -o"$OUTPUT" -y >/dev/null 2>&1
 
 if [[ -n "$INITRD_PATH" ]]; then
   INITRD_FILENAME=$(basename "$INITRD_PATH")
-  "$SEVENZIP" e "$ISO" "$INITRD_PATH" -o"$OUTPUT" -y >/dev/null 2>&1
+  7zz e "$ISO" "$INITRD_PATH" -o"$OUTPUT" -y >/dev/null 2>&1
 fi
 
 if [[ -n "$SQUASHFS_PATH" ]]; then
   SQUASHFS_FILENAME=$(basename "$SQUASHFS_PATH")
-  "$SEVENZIP" e "$ISO" "$SQUASHFS_PATH" -o"$OUTPUT" -y >/dev/null 2>&1
+  7zz e "$ISO" "$SQUASHFS_PATH" -o"$OUTPUT" -y >/dev/null 2>&1
 fi
 
 # --- Step 5: Write manifest ---

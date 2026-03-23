@@ -16,11 +16,6 @@ if ! check qemu-system-x86_64; then
   missing+=("qemu")
 fi
 
-# 7z — needed for ISO extraction (brew installs as 7zz)
-if ! check 7z && ! check 7zz; then
-  missing+=("7z")
-fi
-
 # mkisofs — needed for creating mock ISOs in tests
 if ! check mkisofs; then
   missing+=("mkisofs")
@@ -67,7 +62,6 @@ install_brew() {
   for dep in "${missing[@]}"; do
     case "$dep" in
       qemu)    pkgs+=("qemu") ;;
-      7z)      pkgs+=("sevenzip") ;;
       mkisofs) pkgs+=("cdrtools") ;;
     esac
   done
@@ -79,7 +73,6 @@ install_apt() {
   for dep in "${missing[@]}"; do
     case "$dep" in
       qemu)    pkgs+=("qemu-system-x86") ;;
-      7z)      pkgs+=("p7zip-full") ;;
       mkisofs) pkgs+=("genisoimage") ;;
       grub)    pkgs+=("grub-pc-bin" "grub-efi-amd64-bin" "grub2-common") ;;
       sgdisk)  pkgs+=("gdisk") ;;
@@ -94,7 +87,6 @@ install_dnf() {
   for dep in "${missing[@]}"; do
     case "$dep" in
       qemu)    pkgs+=("qemu-system-x86") ;;
-      7z)      pkgs+=("p7zip-plugins") ;;
       mkisofs) pkgs+=("genisoimage") ;;
       grub)    pkgs+=("grub2-pc-modules" "grub2-efi-x64-modules" "grub2-tools") ;;
       sgdisk)  pkgs+=("gdisk") ;;
@@ -109,7 +101,6 @@ install_pacman() {
   for dep in "${missing[@]}"; do
     case "$dep" in
       qemu)    pkgs+=("qemu-system-x86") ;;
-      7z)      pkgs+=("p7zip") ;;
       mkisofs) pkgs+=("cdrtools") ;;
       grub)    pkgs+=("grub") ;;
       sgdisk)  pkgs+=("gptfdisk") ;;

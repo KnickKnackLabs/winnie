@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+#MISE description="Show available Alpine Linux versions and variants"
+#USAGE flag "-v --version <version>" help="Show variants for a specific version"
+#USAGE flag "--json" help="Output as JSON"
+set -euo pipefail
+
+MIRROR="https://dl-cdn.alpinelinux.org/alpine"
+VERSION="${usage_version:-}"
+JSON="${usage_json:-false}"
+
+source "$MISE_CONFIG_ROOT/lib/common.sh"
+
+fetch_version_detail() {
+  local yaml
+  yaml=$(curl -fsSL "$MIRROR/v$VERSION/releases/x86_64/latest-releases.yaml") || { echo "Error: version $VERSION not found." >&2; exit 1; }
+
+  echo "$yaml" | yq -o=json | jq --arg mirror "$MIRROR" --arg version "$VERSION" '
+    [ .[] | select(.iso | test("\\.iso$")) | {
+      filename: .iso,
+      variant: (.flavor | sub("^alpine-"; "")),
+      url: ($mirror + "/v" + $version + "/releases/x86_64/" + .iso),
+      sha256: .sha256
+    } ]'
+}
+
+fetch_version_list() {
+  local html
+  html=$(curl -fsSL "$MIRROR/")
+
+  echo "$html" | sed -n 's/.*href="v\([0-9][0-9.]*\)\/".*/\1/p' \
+    | sort -t. -k1,1n -k2,2n \
+    | jq -R '{
+        version: .,
+        variants: ["standard", "extended", "virt", "netboot"]
+      }' | jq -s .
+}
+
+if [[ -n "$VERSION" ]]; then
+  entries=$(spin "Fetching Alpine $VERSION..." bash -c "$(declare -f fetch_version_detail); VERSION='$VERSION' MIRROR='$MIRROR' fetch_version_detail")
+
+  if [[ "$JSON" == "true" ]]; then
+    echo "$entries" | jq .
+  else
+    gum style --bold "Alpine Linux $VERSION"
+    echo ""
+    echo "$entries" | jq -r '["Filename","Variant"], (.[] | [.filename, .variant]) | @csv' \
+      | tr -d '"' | gum table -p -w 50,12
+  fi
+else
+  entries=$(spin "Fetching Alpine versions..." bash -c "$(declare -f fetch_version_list); MIRROR='$MIRROR' fetch_version_list")
+
+  if [[ "$JSON" == "true" ]]; then
+    echo "$entries" | jq .
+  else
+    gum style --bold "Alpine Linux — available versions"
+    echo ""
+    echo "$entries" | jq -r '["Version","Variants"], (.[] | [.version, (.variants | join(" / "))]) | @csv' \
+      | tr -d '"' | gum table -p -w 10,40
+  fi
+fi

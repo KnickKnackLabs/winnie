@@ -4,14 +4,6 @@
 
 load test_helper
 
-# Detect 7z binary (7zz on macOS/brew, 7z on Linux)
-if command -v 7zz &>/dev/null; then
-  SEVENZIP=7zz
-elif command -v 7z &>/dev/null; then
-  SEVENZIP=7z
-else
-  SEVENZIP=""
-fi
 
 setup() {
   export TEST_DIR="$BATS_TEST_TMPDIR"
@@ -53,8 +45,8 @@ EOF
   command -v mkisofs
 }
 
-@test "7z or 7zz is available" {
-  [[ -n "$SEVENZIP" ]]
+@test "7zz is available" {
+  command -v 7zz
 }
 
 # --- grub.cfg parsing ---
