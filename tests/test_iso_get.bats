@@ -1,9 +1,9 @@
 #!/usr/bin/env bats
 
 # Tests for iso:get — argument validation, dedup, checksum verification.
-# Uses the mock-first overlay pattern for catalog mocks and PATH mocks for curl.
+# Uses the mock-first overlay pattern for catalog mocks and env var injection for curl.
 
-WINNIE_DIR="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
+load test_helper
 
 setup() {
   export ISO_DIR="$BATS_TEST_TMPDIR/isos"
@@ -43,16 +43,15 @@ coreutils = "latest"
 [task_config]
 includes = [
   "$BATS_TEST_TMPDIR/mocks/.mise/tasks",
-  "$WINNIE_DIR/.mise/tasks",
+  "$MISE_CONFIG_ROOT/.mise/tasks",
 ]
 EOF
-  ln -sf "$WINNIE_DIR/lib" "$OVERLAY/lib"
+  ln -sf "$MISE_CONFIG_ROOT/lib" "$OVERLAY/lib"
   git -C "$OVERLAY" init -q -b main 2>/dev/null || true
   mise trust "$OVERLAY/mise.toml" 2>/dev/null
 }
 
 # Mock curl via ${CURL:-curl} env var injection.
-# Writes a mock script that copies content from a file to the -o target.
 mock_curl() {
   local content="${1:-fake iso content}"
   local content_file="$BATS_TEST_TMPDIR/mock_curl_content"
@@ -74,7 +73,7 @@ SCRIPT
   export CURL="$mock_script"
 }
 
-# Run iso:get through the overlay
+# Run iso:get through the overlay (needed for catalog mocking)
 run_iso_get() {
   setup_overlay
   WINNIE_ISO_DIR="$ISO_DIR" CURL="${CURL:-curl}" MOCK_CURL_CONTENT_FILE="${MOCK_CURL_CONTENT_FILE:-}" \
