@@ -23,8 +23,8 @@ die() { echo "Error: $*" >&2; exit 1; }
 # --- validate distro ---
 
 case "$DISTRO" in
-  mint|pop-os) ;;
-  *) die "unsupported distro '$DISTRO'. Supported: mint, pop-os" ;;
+  alpine|debian|mint|pop-os) ;;
+  *) die "unsupported distro '$DISTRO'. Supported: alpine, debian, mint, pop-os" ;;
 esac
 
 # --- resolve version (interactive if not specified) ---

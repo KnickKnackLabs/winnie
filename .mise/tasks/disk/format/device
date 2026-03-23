@@ -3,7 +3,6 @@
 #MISE hide=true
 #USAGE flag "-d --device <device>" help="Block device (e.g., /dev/sdb)" required
 #USAGE flag "-y --yes" help="Skip confirmation prompt"
-#USAGE flag "--iso <path>" help="ISO file to pre-load after formatting"
 set -euo pipefail
 
 DEVICE="${usage_device}"
@@ -147,14 +146,13 @@ grub-install \
   --efi-directory="$MOUNT_EFI" \
   --removable
 
-# ── Deploy config ─────────────────────────────────────────────────
+# ── Create distros directory ──────────────────────────────────────
 
-echo "Deploying grub.cfg..."
-cp "$MISE_CONFIG_ROOT/grub/grub.cfg" "$MOUNT_DATA/boot/grub/grub.cfg"
+mkdir -p "$MOUNT_DATA/distros"
 
-# ── Create ISO directory ──────────────────────────────────────────
-
-mkdir -p "$MOUNT_DATA/isos"
+echo "Generating initial grub.cfg..."
+source "$MISE_CONFIG_ROOT/lib/grub-gen.sh"
+grub_generate "$MOUNT_DATA"
 
 # ── Done ──────────────────────────────────────────────────────────
 
@@ -163,9 +161,6 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "winnie: $DEVICE is ready!"
 echo ""
 echo "Next steps:"
-echo "  1. Mount the data partition: mount $PART_DATA /mnt"
-echo "  2. Copy ISOs:               cp *.iso /mnt/isos/"
-echo "  3. Unmount:                  umount /mnt"
-echo "  4. Boot from USB!"
+echo "  winnie disk:add <iso-file> -d $DEVICE"
 echo ""
-echo "Or use: mise run disk:add -d $DEVICE <iso-file>"
+echo "Boot from USB when done."

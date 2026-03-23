@@ -56,8 +56,8 @@ if mount /dev/mapper/\${LOOPNAME}p3 /mnt/data 2>/dev/null; then
   echo '  GRUB:'
   if [[ -f /mnt/data/boot/grub/grub.cfg ]]; then
     echo '    grub.cfg: present'
-    distros=\$(grep -oP 'menuentry.*\\[\\K[A-Za-z/ ]+(?=\\])' /mnt/data/boot/grub/grub.cfg | sort -u | paste -sd ', ' || true)
-    echo \"    Detects: \$distros\"
+    entries=\$(grep -c '^menuentry' /mnt/data/boot/grub/grub.cfg 2>/dev/null || echo 0)
+    echo \"    Entries: \$entries\"
   else
     echo '    grub.cfg: MISSING'
   fi
@@ -73,13 +73,18 @@ if mount /dev/mapper/\${LOOPNAME}p3 /mnt/data 2>/dev/null; then
   done
 
   echo ''
-  echo '  ISOs:'
-  if ls /mnt/data/isos/*.iso /mnt/data/isos/*.ISO 2>/dev/null | head -1 >/dev/null 2>&1; then
-    for iso in /mnt/data/isos/*.iso /mnt/data/isos/*.ISO; do
-      [[ -f \"\$iso\" ]] || continue
-      name=\$(basename \"\$iso\")
-      size=\$(du -h \"\$iso\" | cut -f1)
-      printf '    %-50s %s\n' \"\$name\" \"\$size\"
+  echo '  Distros:'
+  if ls -d /mnt/data/distros/*/ 2>/dev/null | head -1 >/dev/null 2>&1; then
+    for dir in /mnt/data/distros/*/; do
+      [[ -d \"\$dir\" ]] || continue
+      slug=\$(basename \"\$dir\")
+      size=\$(du -sh \"\$dir\" | cut -f1)
+      title='(no manifest)'
+      if [[ -f \"\$dir/manifest.json\" ]]; then
+        apt-get install -y -qq jq >/dev/null 2>&1 || true
+        title=\$(jq -r '.title' \"\$dir/manifest.json\" 2>/dev/null || echo '?')
+      fi
+      printf '    %-40s %8s  %s\n' \"\$slug\" \"\$size\" \"\$title\"
     done
   else
     echo '    (none)'

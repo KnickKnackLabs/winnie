@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+#MISE description="Add an ISO's boot files to a block device"
+#MISE hide=true
+#USAGE arg "<iso>" help="Path to ISO file to add"
+#USAGE flag "-d --device <device>" help="Block device (e.g., /dev/sdb)" required
+set -euo pipefail
+
+ISO="${usage_iso}"
+DEVICE="${usage_device}"
+
+if [[ ! -f "$ISO" ]]; then
+  echo "Error: $ISO does not exist or is not a file." >&2
+  exit 1
+fi
+
+# --- Step 1: Extract boot files from ISO ---
+
+EXTRACT_DIR=$(mktemp -d)
+trap 'rm -rf "$EXTRACT_DIR"' EXIT
+
+ISO_BASENAME="$(basename "$ISO" .iso)"
+echo "Extracting boot files from $ISO_BASENAME..."
+mise run -q iso:extract -- "$ISO" --output "$EXTRACT_DIR"
+
+if [[ ! -f "$EXTRACT_DIR/manifest.json" ]]; then
+  echo "Error: iso:extract did not produce a manifest." >&2
+  exit 1
+fi
+
+# --- Step 2: Mount data partition ---
+
+# Find the data partition (partition 3)
+if [[ "$DEVICE" =~ [0-9]$ ]]; then
+  PART_DATA="${DEVICE}p3"
+else
+  PART_DATA="${DEVICE}3"
+fi
+
+if [[ ! -b "$PART_DATA" ]]; then
+  echo "Error: $PART_DATA not found. Is $DEVICE a winnie disk?" >&2
+  exit 1
+fi
+
+MOUNT_POINT=$(findmnt -n -o TARGET "$PART_DATA" 2>/dev/null || true)
+MOUNTED_BY_US=false
+
+if [[ -z "$MOUNT_POINT" ]]; then
+  MOUNT_POINT=$(mktemp -d)
+  mount "$PART_DATA" "$MOUNT_POINT"
+  MOUNTED_BY_US=true
+  trap 'umount "$MOUNT_POINT" 2>/dev/null; rmdir "$MOUNT_POINT" 2>/dev/null; rm -rf "$EXTRACT_DIR"' EXIT
+fi
+
+# --- Step 3: Copy extracted files ---
+
+SLUG="$ISO_BASENAME"
+DISTRO_DIR="$MOUNT_POINT/distros/$SLUG"
+
+if [[ -d "$DISTRO_DIR" ]]; then
+  echo "$SLUG already exists on disk. Replacing..."
+  rm -rf "$DISTRO_DIR"
+fi
+
+mkdir -p "$DISTRO_DIR"
+cp -r "$EXTRACT_DIR"/* "$DISTRO_DIR/"
+echo "  Copied files to /distros/$SLUG/"
+
+# --- Step 4: Regenerate grub.cfg ---
+
+source "$MISE_CONFIG_ROOT/lib/grub-gen.sh"
+grub_generate "$MOUNT_POINT"
+
+for manifest in "$MOUNT_POINT"/distros/*/manifest.json; do
+  [[ -f "$manifest" ]] || continue
+  slug=$(basename "$(dirname "$manifest")")
+  title=$(jq -r '.title' "$manifest")
+  echo "  GRUB entry: $title ($slug)"
+done
+
+echo ""
+echo "Distros on disk:"
+for d in "$MOUNT_POINT"/distros/*/; do
+  [[ -d "$d" ]] || continue
+  s=$(basename "$d")
+  t=$(jq -r '.title' "$d/manifest.json" 2>/dev/null || echo '?')
+  echo "  $s — $t"
+done
+
+sync
+echo "Done."

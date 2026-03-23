@@ -3,7 +3,6 @@
 #USAGE flag "-d --device <device>" help="Block device (e.g., /dev/sdb)"
 #USAGE flag "-i --image <path>" help="Disk image path (creates if needed)"
 #USAGE flag "-s --size <size>" help="Image size in MB (with --image)" default="2048"
-#USAGE flag "--iso <path>" help="ISO file to pre-load onto the disk"
 #USAGE flag "-y --yes" help="Skip confirmation prompt"
 set -euo pipefail
 
@@ -26,10 +25,8 @@ fi
 if [[ -n "$DEVICE" ]]; then
   ARGS=("--device" "$DEVICE")
   [[ "${usage_yes:-false}" == "true" ]] && ARGS+=("--yes")
-  [[ -n "${usage_iso:-}" ]] && ARGS+=("--iso" "$usage_iso")
   mise run -q disk:format:device -- "${ARGS[@]}"
 else
   ARGS=("--image" "$IMAGE" "--size" "${usage_size}")
-  [[ -n "${usage_iso:-}" ]] && ARGS+=("--iso" "$usage_iso")
   mise run -q disk:format:image -- "${ARGS[@]}"
 fi

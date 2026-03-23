@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="List ISOs on a winnie disk"
+#MISE description="List distros on a winnie disk"
 #USAGE flag "-d --device <device>" help="Block device (e.g., /dev/sdb)" required
 set -euo pipefail
 
@@ -13,7 +13,7 @@ else
 fi
 
 if [[ ! -b "$PART_DATA" ]]; then
-  echo "Error: $PART_DATA not found. Is $DEVICE a winnie disk?"
+  echo "Error: $PART_DATA not found. Is $DEVICE a winnie disk?" >&2
   exit 1
 fi
 
@@ -28,66 +28,38 @@ if [[ -z "$MOUNT_POINT" ]]; then
   trap 'umount "$MOUNT_POINT" 2>/dev/null; rmdir "$MOUNT_POINT" 2>/dev/null' EXIT
 fi
 
-ISO_DIR="$MOUNT_POINT/isos"
-if [[ ! -d "$ISO_DIR" ]]; then
-  echo "No /isos directory found. Is $DEVICE a winnie disk?"
+DISTROS_DIR="$MOUNT_POINT/distros"
+if [[ ! -d "$DISTROS_DIR" ]]; then
+  echo "No /distros directory found. Is $DEVICE a winnie disk?" >&2
   exit 1
 fi
-
-# Detect distro family for each ISO
-detect_distro() {
-  local iso="$1"
-  local mnt
-  mnt=$(mktemp -d)
-
-  if ! mount -o ro,loop "$iso" "$mnt" 2>/dev/null; then
-    echo "Unknown (mount failed)"
-    rmdir "$mnt" 2>/dev/null
-    return
-  fi
-
-  local family="Unknown"
-  if [[ -e "$mnt/boot/grub/loopback.cfg" ]]; then
-    family="loopback.cfg"
-  elif [[ -e "$mnt/casper/vmlinuz" ]]; then
-    family="Ubuntu/Casper"
-  elif [[ -e "$mnt/live/vmlinuz" ]]; then
-    family="Debian Live"
-  elif [[ -e "$mnt/arch/boot/x86_64/vmlinuz-linux" ]]; then
-    family="Arch Linux"
-  elif [[ -e "$mnt/images/pxeboot/vmlinuz" ]]; then
-    family="Fedora"
-  elif [[ -e "$mnt/boot/vmlinuz-lts" ]]; then
-    family="Alpine"
-  elif [[ -e "$mnt/boot/bzImage" ]]; then
-    family="NixOS"
-  fi
-
-  umount "$mnt" 2>/dev/null
-  rmdir "$mnt" 2>/dev/null
-  echo "$family"
-}
 
 echo "winnie: $DEVICE"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
 count=0
-for iso in "$ISO_DIR"/*.iso "$ISO_DIR"/*.ISO; do
-  if [[ -f "$iso" ]]; then
-    basename=$(basename "$iso")
-    size=$(du -h "$iso" | cut -f1)
-    distro=$(detect_distro "$iso")
-    printf "  %-50s %8s  [%s]\n" "$basename" "$size" "$distro"
-    count=$((count + 1))
+for dir in "$DISTROS_DIR"/*/; do
+  [[ -d "$dir" ]] || continue
+  slug=$(basename "$dir")
+  if [[ -f "$dir/manifest.json" ]]; then
+    title=$(jq -r '.title' "$dir/manifest.json")
+    kernel=$(jq -r '.kernel_path' "$dir/manifest.json" | xargs basename)
+    has_squashfs="no"
+    [[ -n "$(jq -r '.squashfs_path // empty' "$dir/manifest.json")" ]] && has_squashfs="yes"
+    size=$(du -sh "$dir" | cut -f1)
+    printf "  %-40s %8s  %s\n" "$slug" "$size" "$title"
+  else
+    printf "  %-40s %8s  %s\n" "$slug" "?" "(no manifest)"
   fi
+  count=$((count + 1))
 done
 
 if [[ $count -eq 0 ]]; then
-  echo "  No ISOs found."
+  echo "  No distros found."
   echo ""
-  echo "  Add ISOs with: mise run disk:add -d $DEVICE <iso-file>"
+  echo "  Add one with: winnie disk:add <iso-file> -d $DEVICE"
 fi
 
 echo ""
-echo "$count ISO(s) on drive."
+echo "$count distro(s) on drive."

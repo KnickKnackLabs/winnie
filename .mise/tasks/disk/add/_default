@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+#MISE description="Copy an ISO file onto a winnie disk"
+#USAGE arg "<iso>" help="Path to ISO file to add"
+#USAGE flag "-d --device <device>" help="Block device (e.g., /dev/sdb)"
+#USAGE flag "-i --image <path>" help="Disk image path"
+set -euo pipefail
+
+ISO="${usage_iso}"
+DEVICE="${usage_device:-}"
+IMAGE="${usage_image:-}"
+
+if [[ -n "$DEVICE" && -n "$IMAGE" ]]; then
+  echo "Error: specify --device or --image, not both." >&2
+  exit 1
+fi
+
+if [[ -z "$DEVICE" && -z "$IMAGE" ]]; then
+  echo "Error: specify --device <block-device> or --image <path>." >&2
+  echo "" >&2
+  echo "  disk:add <iso> --device /dev/sdb    Add ISO to a USB drive" >&2
+  echo "  disk:add <iso> --image disk.img     Add ISO to a disk image" >&2
+  exit 1
+fi
+
+if [[ -n "$DEVICE" ]]; then
+  mise run -q disk:add:device -- "$ISO" --device "$DEVICE"
+else
+  mise run -q disk:add:image -- "$ISO" --image "$IMAGE"
+fi
