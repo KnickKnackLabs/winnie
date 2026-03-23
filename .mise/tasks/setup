@@ -16,6 +16,16 @@ if ! check qemu-system-x86_64; then
   missing+=("qemu")
 fi
 
+# 7z — needed for ISO extraction (brew installs as 7zz)
+if ! check 7z && ! check 7zz; then
+  missing+=("7z")
+fi
+
+# mkisofs — needed for creating mock ISOs in tests
+if ! check mkisofs; then
+  missing+=("mkisofs")
+fi
+
 # grub-install — needed for format task (Linux only)
 if [[ "$(uname)" == "Linux" ]]; then
   if ! check grub-install && ! check grub2-install; then
@@ -56,8 +66,9 @@ install_brew() {
   local pkgs=()
   for dep in "${missing[@]}"; do
     case "$dep" in
-      qemu)   pkgs+=("qemu") ;;
-      # grub/sgdisk/mkfs not typically needed on macOS (format is Linux-only)
+      qemu)    pkgs+=("qemu") ;;
+      7z)      pkgs+=("sevenzip") ;;
+      mkisofs) pkgs+=("cdrtools") ;;
     esac
   done
   [[ ${#pkgs[@]} -gt 0 ]] && brew install "${pkgs[@]}"
@@ -67,10 +78,12 @@ install_apt() {
   local pkgs=()
   for dep in "${missing[@]}"; do
     case "$dep" in
-      qemu)   pkgs+=("qemu-system-x86") ;;
-      grub)   pkgs+=("grub-pc-bin" "grub-efi-amd64-bin" "grub2-common") ;;
-      sgdisk) pkgs+=("gdisk") ;;
-      mkfs)   pkgs+=("dosfstools" "e2fsprogs") ;;
+      qemu)    pkgs+=("qemu-system-x86") ;;
+      7z)      pkgs+=("p7zip-full") ;;
+      mkisofs) pkgs+=("genisoimage") ;;
+      grub)    pkgs+=("grub-pc-bin" "grub-efi-amd64-bin" "grub2-common") ;;
+      sgdisk)  pkgs+=("gdisk") ;;
+      mkfs)    pkgs+=("dosfstools" "e2fsprogs") ;;
     esac
   done
   [[ ${#pkgs[@]} -gt 0 ]] && sudo apt-get update && sudo apt-get install -y "${pkgs[@]}"
@@ -80,10 +93,12 @@ install_dnf() {
   local pkgs=()
   for dep in "${missing[@]}"; do
     case "$dep" in
-      qemu)   pkgs+=("qemu-system-x86") ;;
-      grub)   pkgs+=("grub2-pc-modules" "grub2-efi-x64-modules" "grub2-tools") ;;
-      sgdisk) pkgs+=("gdisk") ;;
-      mkfs)   pkgs+=("dosfstools" "e2fsprogs") ;;
+      qemu)    pkgs+=("qemu-system-x86") ;;
+      7z)      pkgs+=("p7zip-plugins") ;;
+      mkisofs) pkgs+=("genisoimage") ;;
+      grub)    pkgs+=("grub2-pc-modules" "grub2-efi-x64-modules" "grub2-tools") ;;
+      sgdisk)  pkgs+=("gdisk") ;;
+      mkfs)    pkgs+=("dosfstools" "e2fsprogs") ;;
     esac
   done
   [[ ${#pkgs[@]} -gt 0 ]] && sudo dnf install -y "${pkgs[@]}"
@@ -93,10 +108,12 @@ install_pacman() {
   local pkgs=()
   for dep in "${missing[@]}"; do
     case "$dep" in
-      qemu)   pkgs+=("qemu-system-x86") ;;
-      grub)   pkgs+=("grub") ;;
-      sgdisk) pkgs+=("gptfdisk") ;;
-      mkfs)   pkgs+=("dosfstools" "e2fsprogs") ;;
+      qemu)    pkgs+=("qemu-system-x86") ;;
+      7z)      pkgs+=("p7zip") ;;
+      mkisofs) pkgs+=("cdrtools") ;;
+      grub)    pkgs+=("grub") ;;
+      sgdisk)  pkgs+=("gptfdisk") ;;
+      mkfs)    pkgs+=("dosfstools" "e2fsprogs") ;;
     esac
   done
   [[ ${#pkgs[@]} -gt 0 ]] && sudo pacman -S --noconfirm "${pkgs[@]}"
