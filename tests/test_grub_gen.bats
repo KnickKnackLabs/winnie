@@ -67,6 +67,22 @@ make_distro() {
   ! grep -q 'iso-scan/filename=' "$cfg"
 }
 
+@test "grub_generate rewrites live-media-path to extracted location" {
+  make_distro "debian-live" "Debian Live" "live/vmlinuz" "live/initrd.img" "boot=live components live-media-path=/live quiet splash"
+  grub_generate "$TEST_DIR"
+  local cfg="$TEST_DIR/boot/grub/grub.cfg"
+  grep -q 'live-media-path=/distros/debian-live' "$cfg"
+  ! grep -q 'live-media-path=/live' "$cfg"
+}
+
+@test "grub_generate omits initrd line when initrd is empty" {
+  make_distro "memdisk" "Memdisk Distro" "boot/vmlinuz" "" "quiet"
+  grub_generate "$TEST_DIR"
+  local cfg="$TEST_DIR/boot/grub/grub.cfg"
+  grep -q 'linux /distros/memdisk/vmlinuz' "$cfg"
+  ! grep -q 'initrd /distros/memdisk/' "$cfg"
+}
+
 @test "grub_generate handles multiple distros" {
   make_distro "alpine" "Alpine" "boot/vmlinuz-lts" "boot/initramfs-lts" "quiet"
   make_distro "debian" "Debian" "live/vmlinuz" "live/initrd.img" "boot=live"
@@ -86,11 +102,14 @@ make_distro() {
   [ "$first" = "$second" ]
 }
 
-@test "grub_generate produces no entries with empty distros dir" {
+@test "grub_generate produces no distro entries with empty distros dir" {
   mkdir -p "$TEST_DIR/distros"
   grub_generate "$TEST_DIR"
   [ -f "$TEST_DIR/boot/grub/grub.cfg" ]
-  ! grep -q 'menuentry' "$TEST_DIR/boot/grub/grub.cfg"
+  # Should have utility entries (Reboot, Shutdown) but no distro entries
+  ! grep -q 'linux /distros' "$TEST_DIR/boot/grub/grub.cfg"
+  grep -q 'menuentry "Reboot"' "$TEST_DIR/boot/grub/grub.cfg"
+  grep -q 'menuentry "Shutdown"' "$TEST_DIR/boot/grub/grub.cfg"
 }
 
 @test "grub_generate searches for WINNIE label" {

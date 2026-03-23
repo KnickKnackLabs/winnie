@@ -59,58 +59,58 @@ echo "Adding $SLUG to $IMAGE_BASENAME..."
 
 docker run --rm --privileged \
   --platform linux/amd64 \
+  -e "SLUG=$SLUG" \
+  -e "IMAGE_BASENAME=$IMAGE_BASENAME" \
   -v "$(cd "$(dirname "$IMAGE")" && pwd)":/out \
   -v "$EXTRACT_DIR":/extract:ro \
   -v "$MISE_CONFIG_ROOT/lib/grub-gen.sh":/usr/local/lib/grub-gen.sh:ro \
-  debian:bookworm bash -c "
+  debian:bookworm bash -c '
 set -euo pipefail
 
 apt-get update -qq
 apt-get install -y -qq kpartx jq >/dev/null 2>&1
 
-LOOPDEV=\$(losetup -f --show /out/$IMAGE_BASENAME)
-kpartx -av \"\$LOOPDEV\" >/dev/null 2>&1
-LOOPNAME=\$(basename \"\$LOOPDEV\")
-PART_DATA=\"/dev/mapper/\${LOOPNAME}p3\"
+LOOPDEV=$(losetup -f --show /out/$IMAGE_BASENAME)
+kpartx -av "$LOOPDEV" >/dev/null 2>&1
+LOOPNAME=$(basename "$LOOPDEV")
+PART_DATA="/dev/mapper/${LOOPNAME}p3"
 
-MOUNT_DATA=\$(mktemp -d)
-mount \"\$PART_DATA\" \"\$MOUNT_DATA\"
+MOUNT_DATA=$(mktemp -d)
+mount "$PART_DATA" "$MOUNT_DATA"
+DISTRO_DIR="$MOUNT_DATA/distros/$SLUG"
 
-SLUG='$SLUG'
-DISTRO_DIR=\"\$MOUNT_DATA/distros/\$SLUG\"
-
-if [[ -d \"\$DISTRO_DIR\" ]]; then
-  echo \"\$SLUG already exists on the image. Replacing...\"
-  rm -rf \"\$DISTRO_DIR\"
+if [[ -d "$DISTRO_DIR" ]]; then
+  echo "$SLUG already exists on the image. Replacing..."
+  rm -rf "$DISTRO_DIR"
 fi
 
-mkdir -p \"\$DISTRO_DIR\"
-cp -r /extract/* \"\$DISTRO_DIR/\"
-echo \"  Copied files to /distros/\$SLUG/\"
+mkdir -p "$DISTRO_DIR"
+cp -r /extract/* "$DISTRO_DIR/"
+echo "  Copied files to /distros/$SLUG/"
 
 # --- Regenerate grub.cfg from all manifests ---
 
 source /usr/local/lib/grub-gen.sh
-grub_generate \"\$MOUNT_DATA\"
+grub_generate "$MOUNT_DATA"
 
-for manifest in \"\$MOUNT_DATA\"/distros/*/manifest.json; do
-  [[ -f \"\$manifest\" ]] || continue
-  slug=\$(basename \"\$(dirname \"\$manifest\")\")
-  title=\$(jq -r '.title' \"\$manifest\")
-  echo \"  GRUB entry: \$title (\$slug)\"
+for manifest in "$MOUNT_DATA"/distros/*/manifest.json; do
+  [[ -f "$manifest" ]] || continue
+  slug=$(basename "$(dirname "$manifest")")
+  title=$(jq -r ".title" "$manifest")
+  echo "  GRUB entry: $title ($slug)"
 done
 
-echo ''
-echo 'Distros on image:'
-ls -d \"\$MOUNT_DATA\"/distros/*/ 2>/dev/null | while read -r d; do
-  s=\$(basename \"\$d\")
-  t=\$(jq -r '.title' \"\$d/manifest.json\" 2>/dev/null || echo '?')
-  echo \"  \$s — \$t\"
+echo ""
+echo "Distros on image:"
+ls -d "$MOUNT_DATA"/distros/*/ 2>/dev/null | while read -r d; do
+  s=$(basename "$d")
+  t=$(jq -r ".title" "$d/manifest.json" 2>/dev/null || echo "?")
+  echo "  $s — $t"
 done
 
 sync
-umount \"\$MOUNT_DATA\"
-kpartx -dv \"\$LOOPDEV\" >/dev/null 2>&1
-losetup -d \"\$LOOPDEV\"
-echo 'Done.'
-"
+umount "$MOUNT_DATA"
+kpartx -dv "$LOOPDEV" >/dev/null 2>&1
+losetup -d "$LOOPDEV"
+echo "Done."
+'

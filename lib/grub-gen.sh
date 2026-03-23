@@ -30,13 +30,34 @@ GRUBHEAD
     # Strip iso-specific params that don't apply to extracted boot
     params=$(echo "$params" | sed 's|findiso=[^ ]*||g; s|iso-scan/filename=[^ ]*||g' | sed 's/  */ /g; s/^ //; s/ $//')
 
-    cat >> "$grub_dir/grub.cfg" << ENTRY
+    # Rewrite live-media-path to point at extracted location on the winnie drive
+    params=$(echo "$params" | sed "s|live-media-path=[^ ]*|live-media-path=/distros/$slug|g")
 
-menuentry "$title ($slug)" {
-    search --no-floppy --label WINNIE --set=root
-    linux /distros/$slug/$kernel $params
-    initrd /distros/$slug/$initrd
-}
-ENTRY
+    {
+      echo ""
+      echo "menuentry \"$title ($slug)\" {"
+      echo "    search --no-floppy --label WINNIE --set=root"
+      echo "    linux /distros/$slug/$kernel $params"
+      if [[ -n "$initrd" ]]; then
+        echo "    initrd /distros/$slug/$initrd"
+      fi
+      echo "}"
+    } >> "$grub_dir/grub.cfg"
   done
+
+  # Utility entries — always present, even on an empty drive
+  cat >> "$grub_dir/grub.cfg" << 'GRUBTAIL'
+
+menuentry "Reboot" {
+    reboot
+}
+
+menuentry "Shutdown" {
+    halt
+}
+
+menuentry "GRUB Command Line" {
+    commandline
+}
+GRUBTAIL
 }

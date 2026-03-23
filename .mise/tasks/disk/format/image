@@ -30,12 +30,13 @@ docker run --rm --privileged \
   --platform linux/amd64 \
   -v "$MISE_CONFIG_ROOT":/repo:ro \
   -v "$(cd "$(dirname "$OUTPUT")" && pwd)":/out \
+  -v "$MISE_CONFIG_ROOT/lib/grub-gen.sh":/usr/local/lib/grub-gen.sh:ro \
   debian:bookworm bash -c "
 set -euo pipefail
 
 echo 'Installing tools...'
 apt-get update -qq
-apt-get install -y -qq gdisk dosfstools e2fsprogs kpartx grub-pc-bin grub-efi-amd64-bin grub2-common
+apt-get install -y -qq gdisk dosfstools e2fsprogs kpartx grub-pc-bin grub-efi-amd64-bin grub2-common jq
 
 echo 'Setting up loopback device...'
 LOOPDEV=\$(losetup -f --show /out/$OUTPUT_BASENAME)
@@ -80,6 +81,10 @@ grub-install \\
   --removable
 
 mkdir -p \"\$MOUNT_DATA/distros\"
+
+echo 'Generating initial grub.cfg...'
+source /usr/local/lib/grub-gen.sh
+grub_generate \"\$MOUNT_DATA\"
 
 sync
 echo 'Cleaning up...'

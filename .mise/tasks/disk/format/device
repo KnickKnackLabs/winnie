@@ -150,6 +150,10 @@ grub-install \
 
 mkdir -p "$MOUNT_DATA/distros"
 
+echo "Generating initial grub.cfg..."
+source "$MISE_CONFIG_ROOT/lib/grub-gen.sh"
+grub_generate "$MOUNT_DATA"
+
 # ── Done ──────────────────────────────────────────────────────────
 
 echo ""
