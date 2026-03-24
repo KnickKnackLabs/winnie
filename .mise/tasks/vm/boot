@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Boot a winnie disk image in QEMU"
-#USAGE flag "-i --image <path>" help="Disk image path" default="disk.img"
+#USAGE flag "-i --image <path>" help="Disk image path" default=""
 #USAGE flag "--arch <arch>" help="Guest architecture (default: host)" default=""
 #USAGE flag "--uefi" help="Boot in UEFI mode (default: BIOS)"
 #USAGE flag "--headless" help="Headless mode (serial console, no GUI window)"
@@ -12,7 +12,7 @@ set -euo pipefail
 
 source "$MISE_CONFIG_ROOT/lib/common.sh"
 
-IMAGE="${usage_image}"
+IMAGE="${usage_image:-}"
 CDROM="${usage_cdrom:-}"
 UEFI="${usage_uefi:-false}"
 HEADLESS="${usage_headless:-false}"
@@ -20,11 +20,9 @@ MEMORY="${usage_memory}"
 CPUS="${usage_cpus}"
 NO_NET="${usage_no_net:-false}"
 
-# Need at least a disk image or a cdrom
-if [[ -z "$CDROM" && ! -f "$IMAGE" ]]; then
+if [[ -n "$IMAGE" && ! -f "$IMAGE" ]]; then
   echo "Error: $IMAGE not found."
   echo "Create one with: winnie disk:format --image disk.img"
-  echo "Or boot an ISO directly with: winnie vm:boot --cdrom <iso>"
   exit 1
 fi
 
@@ -67,14 +65,11 @@ QEMU_ARGS=(
 [[ -n "$CPU" ]] && QEMU_ARGS+=(-cpu "$CPU")
 
 # Disk and/or cdrom
+[[ -n "$IMAGE" ]] && QEMU_ARGS+=(-drive "file=$IMAGE,format=raw,if=virtio")
 if [[ -n "$CDROM" ]]; then
   QEMU_ARGS+=(-cdrom "$CDROM" -boot d)
-  # Also attach disk image if it exists (for installing to disk from ISO)
-  if [[ -f "$IMAGE" ]]; then
-    QEMU_ARGS+=(-drive "file=$IMAGE,format=raw,if=virtio")
-  fi
-else
-  QEMU_ARGS+=(-drive "file=$IMAGE,format=raw,if=virtio" -boot c)
+elif [[ -n "$IMAGE" ]]; then
+  QEMU_ARGS+=(-boot c)
 fi
 
 # Network: user-mode NAT by default (guest gets internet, host can't reach guest)
@@ -161,8 +156,10 @@ fi
 # Named by image basename so multiple VMs can run concurrently.
 if [[ -n "$CDROM" ]]; then
   VM_ID="$(basename "$CDROM" .iso)"
-else
+elif [[ -n "$IMAGE" ]]; then
   VM_ID="$(basename "$IMAGE" .img)"
+else
+  VM_ID="winnie-$$"
 fi
 WINNIE_RUN_DIR="${TMPDIR:-/tmp}/winnie"
 mkdir -p "$WINNIE_RUN_DIR"
@@ -180,7 +177,8 @@ fi
 ACCEL_LABEL="$ACCEL"
 [[ "$NATIVE" == "true" ]] && ACCEL_LABEL="$ACCEL (native)"
 
-BOOT_SOURCE="$IMAGE"
+BOOT_SOURCE="(no disk)"
+[[ -n "$IMAGE" ]] && BOOT_SOURCE="$IMAGE"
 [[ -n "$CDROM" ]] && BOOT_SOURCE="$CDROM (cdrom)"
 
 BOOT_MODE="BIOS"
