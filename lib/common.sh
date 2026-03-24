@@ -140,6 +140,9 @@ deb_arch() {
   esac
 }
 
+# Common packages needed for any disk:format operation (arch-independent).
+GRUB_COMMON_PACKAGES="gdisk dosfstools e2fsprogs kpartx grub2-common jq"
+
 # GRUB-specific apt packages for an architecture (without common tools).
 # Usage: grub_only_packages <arch>
 # Returns space-separated package list (grub bins only).
@@ -164,19 +167,7 @@ grub_packages() {
   local arch
   arch="$(normalize_arch "${1:-x86_64}")"
 
-  # Common packages for all arches
-  local common="gdisk dosfstools e2fsprogs kpartx grub2-common jq"
-
-  case "$arch" in
-    aarch64)
-      # ARM64: UEFI only (no legacy BIOS on ARM)
-      echo "$common grub-efi-arm64-bin"
-      ;;
-    *)
-      # x86_64: both legacy BIOS and UEFI
-      echo "$common grub-pc-bin grub-efi-amd64-bin"
-      ;;
-  esac
+  echo "$GRUB_COMMON_PACKAGES $(grub_only_packages "$arch")"
 }
 
 # GRUB install targets for a given architecture.

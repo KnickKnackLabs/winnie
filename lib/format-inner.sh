@@ -42,7 +42,7 @@ done
 
 # If no native arch requested, still need base tools
 if [[ -z "$NATIVE_PACKAGES" ]]; then
-  NATIVE_PACKAGES="gdisk dosfstools e2fsprogs kpartx grub2-common jq"
+  NATIVE_PACKAGES="$GRUB_COMMON_PACKAGES"
 fi
 
 # --- Add foreign dpkg architectures if needed ---
