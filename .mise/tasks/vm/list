@@ -15,7 +15,7 @@ for sock in "$WINNIE_RUN_DIR"/*.sock; do
   [[ -S "$sock" ]] || continue
   vm_id="$(basename "$sock" .sock)"
   # Check if the socket is actually connected to a live QEMU process
-  if printf '' | socat - UNIX-CONNECT:"$sock" >/dev/null 2>&1; then
+  if printf '' | socat - "UNIX-CONNECT:$sock" >/dev/null 2>&1; then
     echo "$vm_id"
     found=true
   else
