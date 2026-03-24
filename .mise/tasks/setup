@@ -21,6 +21,11 @@ if ! check mkisofs; then
   missing+=("mkisofs")
 fi
 
+# socat — needed for vm:screenshot and vm:list (Unix domain socket communication)
+if ! check socat; then
+  missing+=("socat")
+fi
+
 # grub-install — needed for format task (Linux only)
 if [[ "$(uname)" == "Linux" ]]; then
   if ! check grub-install && ! check grub2-install; then
@@ -63,6 +68,7 @@ install_brew() {
     case "$dep" in
       qemu)    pkgs+=("qemu") ;;
       mkisofs) pkgs+=("cdrtools") ;;
+      socat)   pkgs+=("socat") ;;
     esac
   done
   [[ ${#pkgs[@]} -gt 0 ]] && brew install "${pkgs[@]}"
@@ -74,6 +80,7 @@ install_apt() {
     case "$dep" in
       qemu)    pkgs+=("qemu-system-x86") ;;
       mkisofs) pkgs+=("genisoimage") ;;
+      socat)   pkgs+=("socat") ;;
       grub)    pkgs+=("grub-pc-bin" "grub-efi-amd64-bin" "grub2-common") ;;
       sgdisk)  pkgs+=("gdisk") ;;
       mkfs)    pkgs+=("dosfstools" "e2fsprogs") ;;
@@ -88,6 +95,7 @@ install_dnf() {
     case "$dep" in
       qemu)    pkgs+=("qemu-system-x86") ;;
       mkisofs) pkgs+=("genisoimage") ;;
+      socat)   pkgs+=("socat") ;;
       grub)    pkgs+=("grub2-pc-modules" "grub2-efi-x64-modules" "grub2-tools") ;;
       sgdisk)  pkgs+=("gdisk") ;;
       mkfs)    pkgs+=("dosfstools" "e2fsprogs") ;;
@@ -102,6 +110,7 @@ install_pacman() {
     case "$dep" in
       qemu)    pkgs+=("qemu-system-x86") ;;
       mkisofs) pkgs+=("cdrtools") ;;
+      socat)   pkgs+=("socat") ;;
       grub)    pkgs+=("grub") ;;
       sgdisk)  pkgs+=("gptfdisk") ;;
       mkfs)    pkgs+=("dosfstools" "e2fsprogs") ;;
