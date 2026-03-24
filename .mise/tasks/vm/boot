@@ -64,12 +64,15 @@ QEMU_ARGS=(
 [[ -n "$MACHINE" ]] && QEMU_ARGS+=(-machine "$MACHINE")
 [[ -n "$CPU" ]] && QEMU_ARGS+=(-cpu "$CPU")
 
-# aarch64's -machine virt has no default display device (unlike x86 which
-# includes a VGA). Without one, graphical desktops can't start and
-# vm:screenshot has no framebuffer to capture. virtio-gpu-pci is the
-# standard paravirtualized GPU for Linux guests.
+# aarch64's -machine virt has no default display, input, or USB devices
+# (unlike x86 which includes VGA + PS/2). Add them explicitly.
 if [[ "$GUEST_ARCH" == "aarch64" ]]; then
-  QEMU_ARGS+=(-device virtio-gpu-pci)
+  QEMU_ARGS+=(
+    -device virtio-gpu-pci
+    -device qemu-xhci
+    -device usb-kbd
+    -device usb-tablet
+  )
 fi
 
 # Disk and/or cdrom
