@@ -35,7 +35,8 @@ resolve_arch() {
       esac ;;
     pop-os)
       case "$raw" in
-        x86_64) echo "amd64" ;;
+        x86_64)  echo "amd64" ;;
+        aarch64) echo "arm64" ;;
         *) return 1 ;;
       esac ;;
     mint)
