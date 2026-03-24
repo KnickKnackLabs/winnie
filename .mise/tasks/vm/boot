@@ -4,12 +4,16 @@
 #USAGE flag "--uefi" help="Boot in UEFI mode (default: BIOS)"
 #USAGE flag "--headless" help="Headless mode (serial console, no GUI window)"
 #USAGE flag "-m --memory <size>" help="RAM in MB" default="512"
+#USAGE flag "--cpus <n>" help="Number of CPU cores" default="2"
+#USAGE flag "--no-net" help="Disable network (default: user-mode NAT)"
 set -euo pipefail
 
 IMAGE="${usage_image}"
 UEFI="${usage_uefi:-false}"
 HEADLESS="${usage_headless:-false}"
 MEMORY="${usage_memory}"
+CPUS="${usage_cpus}"
+NO_NET="${usage_no_net:-false}"
 
 if [[ ! -f "$IMAGE" ]]; then
   echo "Error: $IMAGE not found."
@@ -26,9 +30,16 @@ fi
 QEMU_ARGS=(
   qemu-system-x86_64
   -m "$MEMORY"
+  -smp "$CPUS"
+  -accel tcg,thread=multi
   -drive "file=$IMAGE,format=raw,if=virtio"
   -boot c
 )
+
+# Network: user-mode NAT by default (guest gets internet, host can't reach guest)
+if [[ "$NO_NET" != "true" ]]; then
+  QEMU_ARGS+=(-nic user,model=virtio-net-pci)
+fi
 
 # UEFI firmware
 if [[ "$UEFI" == "true" ]]; then
@@ -65,5 +76,5 @@ if [[ "$HEADLESS" == "true" ]]; then
   QEMU_ARGS+=(-nographic -serial mon:stdio)
 fi
 
-echo "Booting $IMAGE ($(if [[ "$UEFI" == "true" ]]; then echo "UEFI"; else echo "BIOS"; fi), ${MEMORY}MB RAM$(if [[ "$HEADLESS" == "true" ]]; then echo ", headless"; fi))..."
+echo "Booting $IMAGE ($(if [[ "$UEFI" == "true" ]]; then echo "UEFI"; else echo "BIOS"; fi), ${MEMORY}MB RAM, ${CPUS} CPUs$(if [[ "$HEADLESS" == "true" ]]; then echo ", headless"; fi)$(if [[ "$NO_NET" == "true" ]]; then echo ", no network"; else echo ", NAT network"; fi))..."
 exec "${QEMU_ARGS[@]}"

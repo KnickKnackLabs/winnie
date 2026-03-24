@@ -45,10 +45,14 @@ make_distro() {
   grep -q 'initrd /distros/alpine-3.21/initramfs-lts' "$TEST_DIR/boot/grub/grub.cfg"
 }
 
-@test "grub_generate includes boot params" {
+@test "grub_generate includes boot params and strips quiet/splash" {
   make_distro "debian-live" "Debian Live" "live/vmlinuz" "live/initrd.img" "boot=live components quiet splash"
   grub_generate "$TEST_DIR"
-  grep -q 'boot=live components quiet splash' "$TEST_DIR/boot/grub/grub.cfg"
+  local cfg="$TEST_DIR/boot/grub/grub.cfg"
+  grep -q 'boot=live components' "$cfg"
+  grep -q 'plymouth.enable=0' "$cfg"
+  ! grep -q 'quiet' "$cfg"
+  ! grep -q 'splash' "$cfg"
 }
 
 @test "grub_generate strips findiso param" {

@@ -30,6 +30,12 @@ GRUBHEAD
     # Strip iso-specific params that don't apply to extracted boot
     params=$(echo "$params" | sed 's|findiso=[^ ]*||g; s|iso-scan/filename=[^ ]*||g' | sed 's/  */ /g; s/^ //; s/ $//')
 
+    # Strip splash params — Plymouth can't render its progress bar in QEMU
+    # (needs DRM/KMS driver in initramfs, which stock live ISOs don't include
+    # for virtual GPUs). Show text boot progress instead.
+    params=$(echo "$params" | sed 's|quiet||g; s|splash||g; s|\$extra_kernel_parameters||g' | sed 's/  */ /g; s/^ //; s/ $//')
+    params="$params plymouth.enable=0"
+
     # Ensure live-media-path points at the extracted location on the winnie drive.
     # Some distros include it in their boot params (rewrite), others don't (add).
     # Only relevant when a squashfs was extracted.
