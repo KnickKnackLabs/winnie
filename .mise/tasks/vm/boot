@@ -70,7 +70,8 @@ fi
 # --- UEFI firmware ---
 
 if [[ "$UEFI" == "true" ]]; then
-  BREW_PREFIX="$(brew --prefix 2>/dev/null || echo "")"
+  BREW_PREFIX=""
+  [[ "$(uname -s)" == "Darwin" ]] && BREW_PREFIX="$(brew --prefix 2>/dev/null || echo "")"
 
   # Firmware paths differ by arch
   FW_CODE=""
@@ -87,7 +88,15 @@ if [[ "$UEFI" == "true" ]]; then
           break
         fi
       done
-      FW_VARS="${FW_CODE:+$(dirname "$FW_CODE")/edk2-i386-vars.fd}"
+      for vars_candidate in \
+        "$BREW_PREFIX/share/qemu/edk2-i386-vars.fd" \
+        /usr/share/OVMF/OVMF_VARS.fd \
+        /usr/share/edk2/x64/OVMF_VARS.fd; do
+        if [[ -f "$vars_candidate" ]]; then
+          FW_VARS="$vars_candidate"
+          break
+        fi
+      done
       ;;
     aarch64)
       for candidate in \
@@ -100,7 +109,15 @@ if [[ "$UEFI" == "true" ]]; then
           break
         fi
       done
-      FW_VARS="${FW_CODE:+$(dirname "$FW_CODE")/edk2-arm-vars.fd}"
+      for vars_candidate in \
+        "$BREW_PREFIX/share/qemu/edk2-arm-vars.fd" \
+        /usr/share/AAVMF/AAVMF_VARS.fd \
+        /usr/share/edk2/aarch64/QEMU_VARS.fd; do
+        if [[ -f "$vars_candidate" ]]; then
+          FW_VARS="$vars_candidate"
+          break
+        fi
+      done
       ;;
   esac
 
@@ -117,7 +134,7 @@ if [[ "$UEFI" == "true" ]]; then
     cp "$FW_VARS" "$VARS_TMP"
   else
     # Create empty 64MB vars file if template not found
-    dd if=/dev/zero of="$VARS_TMP" bs=1m count=64 2>/dev/null
+    truncate -s 64M "$VARS_TMP"
   fi
   QEMU_ARGS+=(
     -drive "if=pflash,format=raw,readonly=on,file=$FW_CODE"

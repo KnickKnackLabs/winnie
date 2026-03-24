@@ -17,13 +17,8 @@ spin() {
 # Returns empty string (and exits 1) if the distro doesn't support the arch.
 resolve_arch() {
   local distro="$1"
-  local raw="${2:-$(uname -m)}"
-
-  # Normalize: macOS says "arm64", Linux says "aarch64"
-  case "$raw" in
-    arm64|aarch64) raw="aarch64" ;;
-    x86_64|amd64)  raw="x86_64" ;;
-  esac
+  local raw
+  raw="$(normalize_arch "${2:-$(uname -m)}")"
 
   case "$distro" in
     alpine)
