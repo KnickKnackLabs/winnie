@@ -1,12 +1,92 @@
 #!/usr/bin/env bats
 
 # Tests for disk:format architecture helpers in lib/common.sh:
-# docker_platform, grub_packages, grub_targets
+# docker_platform, grub_packages, grub_targets, parse_arch_flags, deb_arch
 
 load test_helper
 
 setup() {
   source "$MISE_CONFIG_ROOT/lib/common.sh"
+}
+
+# --- ALL_ARCHES ---
+
+@test "ALL_ARCHES contains x86_64 and aarch64" {
+  [[ " ${ALL_ARCHES[*]} " == *" x86_64 "* ]]
+  [[ " ${ALL_ARCHES[*]} " == *" aarch64 "* ]]
+}
+
+@test "ALL_ARCHES has exactly 2 entries" {
+  [ "${#ALL_ARCHES[@]}" -eq 2 ]
+}
+
+# --- parse_arch_flags ---
+
+@test "parse_arch_flags with no args returns all arches" {
+  run parse_arch_flags ""
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"x86_64"* ]]
+  [[ "$output" == *"aarch64"* ]]
+}
+
+@test "parse_arch_flags with empty string returns all arches" {
+  run parse_arch_flags
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"x86_64"* ]]
+  [[ "$output" == *"aarch64"* ]]
+}
+
+@test "parse_arch_flags with single arch returns just that arch" {
+  run parse_arch_flags "aarch64"
+  [ "$status" -eq 0 ]
+  [ "$(echo "$output" | wc -l | tr -d ' ')" -eq 1 ]
+  [ "$output" = "aarch64" ]
+}
+
+@test "parse_arch_flags normalizes arm64 to aarch64" {
+  run parse_arch_flags "arm64"
+  [ "$status" -eq 0 ]
+  [ "$output" = "aarch64" ]
+}
+
+@test "parse_arch_flags normalizes amd64 to x86_64" {
+  run parse_arch_flags "amd64"
+  [ "$status" -eq 0 ]
+  [ "$output" = "x86_64" ]
+}
+
+@test "parse_arch_flags handles multiple arches" {
+  # Simulate mise var=#true format: space-separated shell-escaped string
+  run parse_arch_flags "x86_64 aarch64"
+  [ "$status" -eq 0 ]
+  lines_count="$(echo "$output" | wc -l | tr -d ' ')"
+  [ "$lines_count" -eq 2 ]
+  [ "${lines[0]}" = "x86_64" ]
+  [ "${lines[1]}" = "aarch64" ]
+}
+
+@test "parse_arch_flags normalizes multiple arches" {
+  run parse_arch_flags "amd64 arm64"
+  [ "$status" -eq 0 ]
+  [ "${lines[0]}" = "x86_64" ]
+  [ "${lines[1]}" = "aarch64" ]
+}
+
+# --- deb_arch ---
+
+@test "deb_arch x86_64 returns amd64" {
+  run deb_arch x86_64
+  [ "$output" = "amd64" ]
+}
+
+@test "deb_arch aarch64 returns arm64" {
+  run deb_arch aarch64
+  [ "$output" = "arm64" ]
+}
+
+@test "deb_arch normalizes before mapping" {
+  run deb_arch arm64
+  [ "$output" = "arm64" ]
 }
 
 # --- docker_platform ---

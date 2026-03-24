@@ -112,6 +112,34 @@ resolve_machine() {
 
 # --- disk:format helpers ---
 
+# All supported boot architectures.
+ALL_ARCHES=(x86_64 aarch64)
+
+# Parse variadic --arch flags into normalized arch names, one per line.
+# If input is empty, outputs all supported arches.
+# Usage: parse_arch_flags "$usage_arch"
+# Uses the safe xargs pattern for mise var=#true strings.
+parse_arch_flags() {
+  local raw="${1:-}"
+  if [[ -z "$raw" ]]; then
+    printf '%s\n' "${ALL_ARCHES[@]}"
+    return
+  fi
+  while IFS= read -r arch; do
+    normalize_arch "$arch"
+  done < <(printf '%s' "$raw" | xargs printf '%s\n')
+}
+
+# Map a normalized arch to the Debian dpkg architecture name.
+# Usage: deb_arch <arch>
+deb_arch() {
+  case "$(normalize_arch "${1:-}")" in
+    x86_64)  echo "amd64" ;;
+    aarch64) echo "arm64" ;;
+    *)       echo "$1" ;;
+  esac
+}
+
 # Docker platform for a given target architecture.
 # Usage: docker_platform <arch>
 docker_platform() {

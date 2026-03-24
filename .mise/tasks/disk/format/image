@@ -3,14 +3,19 @@
 #MISE hide=true
 #USAGE flag "-i --image <path>" help="Output image path" default="disk.img"
 #USAGE flag "-s --size <size>" help="Image size in MB" default="2048"
-#USAGE flag "--arch <arch>" help="Target architecture (default: x86_64)" default=""
+#USAGE flag "--arch <arch>" help="Target architectures (default: all)" var=#true
 set -euo pipefail
 
 source "$MISE_CONFIG_ROOT/lib/common.sh"
 
 OUTPUT="${usage_image}"
 SIZE="${usage_size}"
-ARCH="$(normalize_arch "${usage_arch:-x86_64}")"
+
+# Parse arch filter — default is all arches
+ARCHES=()
+while IFS= read -r arch; do
+  ARCHES+=("$arch")
+done < <(parse_arch_flags "${usage_arch:-}")
 
 # Preflight
 if ! command -v docker &>/dev/null; then
@@ -24,102 +29,24 @@ if ! docker info &>/dev/null 2>&1; then
   exit 1
 fi
 
-PLATFORM="$(docker_platform "$ARCH")"
-PACKAGES="$(grub_packages "$ARCH")"
-
 # Create raw disk image
 echo "Creating ${SIZE}MB raw disk image at $OUTPUT..."
 dd if=/dev/zero of="$OUTPUT" bs=1M count="$SIZE" status=progress 2>&1
 
 OUTPUT_BASENAME="$(basename "$OUTPUT")"
 
-# Build grub-install commands based on arch
-GRUB_INSTALL_CMDS=""
-while IFS= read -r target; do
-  case "$target" in
-    i386-pc)
-      GRUB_INSTALL_CMDS+="
-echo 'Installing GRUB (Legacy BIOS)...'
-grub-install \\
-  --target=i386-pc \\
-  --boot-directory=\"\$MOUNT_DATA/boot\" \\
-  --removable \\
-  \"\$LOOPDEV\"
-"
-      ;;
-    *-efi)
-      GRUB_INSTALL_CMDS+="
-echo 'Installing GRUB (UEFI: $target)...'
-grub-install \\
-  --target=$target \\
-  --boot-directory=\"\$MOUNT_DATA/boot\" \\
-  --efi-directory=\"\$MOUNT_EFI\" \\
-  --removable
-"
-      ;;
-  esac
-done < <(grub_targets "$ARCH")
-
+# Run the format script inside a privileged Docker container.
+# Docker runs on the host's native platform — the inner script handles
+# cross-arch GRUB installation via .deb extraction when needed.
 docker run --rm --privileged \
-  --platform "$PLATFORM" \
   -v "$MISE_CONFIG_ROOT":/repo:ro \
   -v "$(cd "$(dirname "$OUTPUT")" && pwd)":/out \
-  -v "$MISE_CONFIG_ROOT/lib/grub-gen.sh":/usr/local/lib/grub-gen.sh:ro \
-  debian:bookworm bash -c "
-set -euo pipefail
-
-echo 'Installing tools...'
-apt-get update -qq
-apt-get install -y -qq $PACKAGES
-
-echo 'Setting up loopback device...'
-LOOPDEV=\$(losetup -f --show /out/$OUTPUT_BASENAME)
-echo \"  -> \$LOOPDEV\"
-
-echo 'Creating GPT partition table...'
-sgdisk --zap-all \"\$LOOPDEV\"
-sgdisk \\
-  --new=1:2048:+2M    --typecode=1:ef02 --change-name=1:'BIOS Boot' \\
-  --new=2:0:+256M     --typecode=2:ef00 --change-name=2:'EFI System' \\
-  --new=3:0:0          --typecode=3:8300 --change-name=3:'WINNIE' \\
-  \"\$LOOPDEV\"
-
-# Create partition device mappings (losetup -P doesn't work in containers)
-echo 'Creating partition mappings...'
-kpartx -av \"\$LOOPDEV\"
-LOOPNAME=\$(basename \"\$LOOPDEV\")
-PART_EFI=\"/dev/mapper/\${LOOPNAME}p2\"
-PART_DATA=\"/dev/mapper/\${LOOPNAME}p3\"
-
-echo 'Formatting partitions...'
-mkfs.fat -F 32 -n EFI \"\$PART_EFI\"
-mkfs.ext4 -L WINNIE -q \"\$PART_DATA\"
-
-MOUNT_DATA=\$(mktemp -d)
-MOUNT_EFI=\$(mktemp -d)
-mount \"\$PART_DATA\" \"\$MOUNT_DATA\"
-mount \"\$PART_EFI\" \"\$MOUNT_EFI\"
-
-$GRUB_INSTALL_CMDS
-
-mkdir -p \"\$MOUNT_DATA/distros\"
-
-echo 'Generating initial grub.cfg...'
-source /usr/local/lib/grub-gen.sh
-grub_generate \"\$MOUNT_DATA\"
-
-sync
-echo 'Cleaning up...'
-umount \"\$MOUNT_EFI\" \"\$MOUNT_DATA\"
-kpartx -dv \"\$LOOPDEV\"
-losetup -d \"\$LOOPDEV\"
-
-echo 'Done.'
-"
+  debian:bookworm \
+  bash /repo/lib/format-inner.sh image "$OUTPUT_BASENAME" "${ARCHES[@]}"
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Image ready: $OUTPUT ($ARCH)"
+echo "Image ready: $OUTPUT (${ARCHES[*]})"
 echo ""
 echo "Add ISOs with:"
 echo "  winnie disk:add <iso-file> --image $OUTPUT"

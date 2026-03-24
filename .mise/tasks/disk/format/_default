@@ -3,13 +3,14 @@
 #USAGE flag "-d --device <device>" help="Block device (e.g., /dev/sdb)"
 #USAGE flag "-i --image <path>" help="Disk image path (creates if needed)"
 #USAGE flag "-s --size <size>" help="Image size in MB (with --image)" default="2048"
-#USAGE flag "--arch <arch>" help="Target architecture (default: x86_64)" default=""
+#USAGE flag "--arch <arch>" help="Target architectures (default: all)" var=#true
 #USAGE flag "-y --yes" help="Skip confirmation prompt"
 set -euo pipefail
 
+source "$MISE_CONFIG_ROOT/lib/common.sh"
+
 DEVICE="${usage_device:-}"
 IMAGE="${usage_image:-}"
-ARCH="${usage_arch:-}"
 
 if [[ -n "$DEVICE" && -n "$IMAGE" ]]; then
   echo "Error: specify --device or --image, not both." >&2
@@ -24,14 +25,19 @@ if [[ -z "$DEVICE" && -z "$IMAGE" ]]; then
   exit 1
 fi
 
+# Build --arch args for passthrough
 ARCH_ARGS=()
-[[ -n "$ARCH" ]] && ARCH_ARGS=("--arch" "$ARCH")
+if [[ -n "${usage_arch:-}" ]]; then
+  while IFS= read -r arch; do
+    ARCH_ARGS+=("--arch" "$arch")
+  done < <(printf '%s' "${usage_arch}" | xargs printf '%s\n')
+fi
 
 if [[ -n "$DEVICE" ]]; then
   ARGS=("--device" "$DEVICE")
   [[ "${usage_yes:-false}" == "true" ]] && ARGS+=("--yes")
-  mise run -q disk:format:device -- "${ARGS[@]}" "${ARCH_ARGS[@]}"
+  mise run -q disk:format:device -- "${ARGS[@]}" "${ARCH_ARGS[@]+"${ARCH_ARGS[@]}"}"
 else
   ARGS=("--image" "$IMAGE" "--size" "${usage_size}")
-  mise run -q disk:format:image -- "${ARGS[@]}" "${ARCH_ARGS[@]}"
+  mise run -q disk:format:image -- "${ARGS[@]}" "${ARCH_ARGS[@]+"${ARCH_ARGS[@]}"}"
 fi
