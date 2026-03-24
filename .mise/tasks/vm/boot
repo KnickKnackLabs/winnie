@@ -71,6 +71,16 @@ if [[ "$UEFI" == "true" ]]; then
   )
 fi
 
+# QEMU monitor socket — enables vm:screenshot and other monitor commands
+# Named by image basename so multiple VMs can run concurrently.
+# Use TMPDIR on macOS (per-user, system-managed), fall back to /tmp.
+VM_ID="$(basename "$IMAGE" .img)"
+WINNIE_RUN_DIR="${TMPDIR:-/tmp}/winnie"
+mkdir -p "$WINNIE_RUN_DIR"
+MONITOR_SOCK="$WINNIE_RUN_DIR/$VM_ID.sock"
+rm -f "$MONITOR_SOCK"
+QEMU_ARGS+=(-monitor "unix:$MONITOR_SOCK,server,nowait")
+
 # Headless: serial console instead of GUI
 if [[ "$HEADLESS" == "true" ]]; then
   QEMU_ARGS+=(-nographic -serial mon:stdio)

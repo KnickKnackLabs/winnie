@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+#MISE description="List running winnie VMs"
+set -euo pipefail
+
+WINNIE_RUN_DIR="${TMPDIR:-/tmp}/winnie"
+
+if [[ ! -d "$WINNIE_RUN_DIR" ]]; then
+  echo "No running VMs."
+  exit 0
+fi
+
+found=false
+for sock in "$WINNIE_RUN_DIR"/*.sock; do
+  [[ -S "$sock" ]] || continue
+  vm_id="$(basename "$sock" .sock)"
+  # Check if the socket is actually connected to a live QEMU process
+  if printf '' | nc -U "$sock" >/dev/null 2>&1; then
+    echo "$vm_id"
+    found=true
+  else
+    # Stale socket — clean up
+    rm -f "$sock"
+  fi
+done
+
+if [[ "$found" != "true" ]]; then
+  echo "No running VMs."
+fi

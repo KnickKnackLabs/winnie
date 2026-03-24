@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+#MISE description="Capture a screenshot from a running winnie VM"
+#USAGE flag "-i --image <path>" help="Disk image path (identifies which VM)" default="disk.img"
+#USAGE flag "-o --output <path>" help="Output file path" default="screenshot.png"
+set -euo pipefail
+
+IMAGE="${usage_image}"
+OUTPUT="${usage_output}"
+
+VM_ID="$(basename "$IMAGE" .img)"
+WINNIE_RUN_DIR="${TMPDIR:-/tmp}/winnie"
+MONITOR_SOCK="$WINNIE_RUN_DIR/$VM_ID.sock"
+
+if [[ ! -S "$MONITOR_SOCK" ]]; then
+  echo "Error: no running VM found for $VM_ID" >&2
+  echo "Is it booted? Check: winnie vm:list" >&2
+  exit 1
+fi
+
+# Resolve to absolute path (QEMU writes relative to its own cwd)
+OUTPUT="$(cd "$(dirname "$OUTPUT")" && pwd)/$(basename "$OUTPUT")"
+
+# QEMU screendump supports PNG natively (Homebrew QEMU includes libpng)
+# Use nc -U (BSD netcat, ships with macOS) to send the monitor command
+printf 'screendump %s -f png\n' "$OUTPUT" | nc -U "$MONITOR_SOCK" >/dev/null 2>&1
+sleep 0.5
+
+if [[ ! -s "$OUTPUT" ]]; then
+  echo "Error: screenshot failed (empty or missing file)." >&2
+  exit 1
+fi
+
+echo "$OUTPUT"
