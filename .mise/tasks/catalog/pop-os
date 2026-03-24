@@ -24,7 +24,7 @@ fetch_version_detail() {
   channels=$(curl -fsSL "$BUCKET/?list-type=2&delimiter=/&prefix=$VERSION/$ARCH/" | s3_prefixes | grep -v "^$VERSION/$ARCH$" | while read -r p; do basename "$p"; done)
 
   if [[ -z "$channels" ]]; then
-    echo "Error: no channels found for Pop!_OS $VERSION." >&2
+    echo "Error: Pop!_OS $VERSION not found for $ARCH. This distro may not publish ISOs for this architecture." >&2
     exit 1
   fi
 

@@ -15,7 +15,7 @@ ARCH=$(resolve_arch alpine "${usage_arch:-}") || { echo "Error: Alpine Linux doe
 
 fetch_version_detail() {
   local yaml
-  yaml=$(curl -fsSL "$MIRROR/v$VERSION/releases/$ARCH/latest-releases.yaml") || { echo "Error: version $VERSION not found." >&2; exit 1; }
+  yaml=$(curl -fsSL "$MIRROR/v$VERSION/releases/$ARCH/latest-releases.yaml") || { echo "Error: Alpine $VERSION not found for $ARCH. This distro may not publish ISOs for this architecture." >&2; exit 1; }
 
   echo "$yaml" | yq -o=json | jq --arg mirror "$MIRROR" --arg version "$VERSION" --arg arch "$ARCH" '
     [ .[] | select(.iso | test("\\.iso$")) | {

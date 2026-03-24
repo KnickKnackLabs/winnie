@@ -13,12 +13,6 @@ source "$MISE_CONFIG_ROOT/lib/common.sh"
 
 ARCH=$(resolve_arch debian "${usage_arch:-}") || { echo "Error: Debian does not publish live ISOs for architecture '${usage_arch:-$(uname -m)}'." >&2; exit 1; }
 
-# Verify this arch has live ISOs on the mirror
-if ! curl -fsSL -o /dev/null "$MIRROR/debian-cd/current-live/$ARCH/iso-hybrid/" 2>/dev/null; then
-  echo "Error: Debian does not publish live ISOs for $ARCH. Try 'amd64' or check https://cdimage.debian.org/debian-cd/current-live/" >&2
-  exit 1
-fi
-
 fetch_version_detail() {
   local base sha_content
 
@@ -32,7 +26,7 @@ fetch_version_detail() {
     base="$MIRROR/cdimage/archive/${VERSION}-live/$ARCH/iso-hybrid"
   fi
 
-  sha_content=$(curl -fsSL "$base/SHA256SUMS" 2>/dev/null) || { echo "Error: version $VERSION not found." >&2; exit 1; }
+  sha_content=$(curl -fsSL "$base/SHA256SUMS" 2>/dev/null) || { echo "Error: Debian $VERSION not found for $ARCH. This distro may not publish ISOs for this architecture." >&2; exit 1; }
 
   echo "$sha_content" | grep '\.iso$' | awk '{print $2 "|" $1}' | while IFS='|' read -r filename sha256; do
     variant=$(echo "$filename" | sed "s/.*${ARCH}-\(.*\)\.iso/\1/")
