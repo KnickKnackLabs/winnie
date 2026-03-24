@@ -53,6 +53,7 @@ GRUBHEAD
       echo ""
       echo "menuentry \"$title ($slug)\" {"
       echo "    search --no-floppy --label WINNIE --set=root"
+      params=$(echo "$params" | sed 's/  */ /g; s/^ //; s/ $//')
       echo "    linux /distros/$slug/$kernel $params"
       if [[ -n "$initrd" ]]; then
         echo "    initrd /distros/$slug/$initrd"
