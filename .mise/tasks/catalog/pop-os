@@ -21,7 +21,7 @@ s3_prefixes() {
 
 fetch_version_detail() {
   local channels parsed channel api_resp url sha256 size build
-  channels=$(curl -fsSL "$BUCKET/?list-type=2&delimiter=/&prefix=$VERSION/$ARCH/" | s3_prefixes | grep -v "^$VERSION/amd64$" | while read -r p; do basename "$p"; done)
+  channels=$(curl -fsSL "$BUCKET/?list-type=2&delimiter=/&prefix=$VERSION/$ARCH/" | s3_prefixes | grep -v "^$VERSION/$ARCH$" | while read -r p; do basename "$p"; done)
 
   if [[ -z "$channels" ]]; then
     echo "Error: no channels found for Pop!_OS $VERSION." >&2
