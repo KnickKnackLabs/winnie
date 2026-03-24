@@ -1,80 +1,177 @@
 #!/usr/bin/env bash
 #MISE description="Boot a winnie disk image in QEMU"
-#USAGE flag "-i --image <path>" help="Disk image path" default="disk.img"
+#USAGE flag "-i --image <path>" help="Disk image path" default=""
+#USAGE flag "--arch <arch>" help="Guest architecture (default: host)" default=""
 #USAGE flag "--uefi" help="Boot in UEFI mode (default: BIOS)"
 #USAGE flag "--headless" help="Headless mode (serial console, no GUI window)"
 #USAGE flag "-m --memory <size>" help="RAM in MB" default="512"
 #USAGE flag "--cpus <n>" help="Number of CPU cores" default="2"
+#USAGE flag "--cdrom <path>" help="Boot from ISO file instead of disk image"
 #USAGE flag "--no-net" help="Disable network (default: user-mode NAT)"
 set -euo pipefail
 
-IMAGE="${usage_image}"
+source "$MISE_CONFIG_ROOT/lib/common.sh"
+
+IMAGE="${usage_image:-}"
+CDROM="${usage_cdrom:-}"
 UEFI="${usage_uefi:-false}"
 HEADLESS="${usage_headless:-false}"
 MEMORY="${usage_memory}"
 CPUS="${usage_cpus}"
 NO_NET="${usage_no_net:-false}"
 
-if [[ ! -f "$IMAGE" ]]; then
+if [[ -n "$IMAGE" && ! -f "$IMAGE" ]]; then
   echo "Error: $IMAGE not found."
   echo "Create one with: winnie disk:format --image disk.img"
   exit 1
 fi
 
-if ! command -v qemu-system-x86_64 &>/dev/null; then
-  echo "Error: qemu-system-x86_64 not found."
+if [[ -n "$CDROM" && ! -f "$CDROM" ]]; then
+  echo "Error: $CDROM not found."
+  exit 1
+fi
+
+# --- architecture detection ---
+
+HOST_ARCH="$(normalize_arch "$(uname -m)")"
+GUEST_ARCH="$(normalize_arch "${usage_arch:-$HOST_ARCH}")"
+QEMU_BIN="qemu-system-$GUEST_ARCH"
+
+if ! command -v "$QEMU_BIN" &>/dev/null; then
+  echo "Error: $QEMU_BIN not found."
   echo "Install with: winnie setup"
   exit 1
 fi
 
+# --- acceleration ---
+
+ACCEL="$(resolve_accel "$HOST_ARCH" "$GUEST_ARCH" "$(uname -s)")"
+NATIVE=false
+[[ "$ACCEL" != "tcg,thread=multi" ]] && NATIVE=true
+
+# --- build QEMU command ---
+
+MACHINE="$(resolve_machine "$GUEST_ARCH")"
+CPU="$(resolve_cpu "$GUEST_ARCH" "$ACCEL")"
+
 QEMU_ARGS=(
-  qemu-system-x86_64
+  "$QEMU_BIN"
   -m "$MEMORY"
   -smp "$CPUS"
-  -accel tcg,thread=multi
-  -drive "file=$IMAGE,format=raw,if=virtio"
-  -boot c
+  -accel "$ACCEL"
 )
+
+[[ -n "$MACHINE" ]] && QEMU_ARGS+=(-machine "$MACHINE")
+[[ -n "$CPU" ]] && QEMU_ARGS+=(-cpu "$CPU")
+
+# aarch64's -machine virt has no default display, input, or USB devices
+# (unlike x86 which includes VGA + PS/2). Add them explicitly.
+if [[ "$GUEST_ARCH" == "aarch64" ]]; then
+  QEMU_ARGS+=(
+    -device virtio-gpu-pci
+    -device qemu-xhci
+    -device usb-kbd
+    -device usb-tablet
+  )
+fi
+
+# Disk and/or cdrom
+[[ -n "$IMAGE" ]] && QEMU_ARGS+=(-drive "file=$IMAGE,format=raw,if=virtio")
+if [[ -n "$CDROM" ]]; then
+  QEMU_ARGS+=(-cdrom "$CDROM" -boot d)
+elif [[ -n "$IMAGE" ]]; then
+  QEMU_ARGS+=(-boot c)
+fi
 
 # Network: user-mode NAT by default (guest gets internet, host can't reach guest)
 if [[ "$NO_NET" != "true" ]]; then
   QEMU_ARGS+=(-nic user,model=virtio-net-pci)
 fi
 
-# UEFI firmware
+# --- UEFI firmware ---
+
 if [[ "$UEFI" == "true" ]]; then
-  # Find OVMF firmware
-  OVMF=""
-  for candidate in \
-    "$(brew --prefix 2>/dev/null)/share/qemu/edk2-x86_64-code.fd" \
-    /usr/share/OVMF/OVMF_CODE.fd \
-    /usr/share/edk2/x64/OVMF_CODE.fd \
-    /usr/share/qemu/OVMF.fd; do
-    if [[ -f "$candidate" ]]; then
-      OVMF="$candidate"
-      break
-    fi
-  done
-  if [[ -z "$OVMF" ]]; then
-    echo "Error: UEFI firmware (OVMF) not found."
+  BREW_PREFIX=""
+  [[ "$(uname -s)" == "Darwin" ]] && BREW_PREFIX="$(brew --prefix 2>/dev/null || echo "")"
+
+  # Firmware paths differ by arch
+  FW_CODE=""
+  FW_VARS=""
+  case "$GUEST_ARCH" in
+    x86_64)
+      for candidate in \
+        "$BREW_PREFIX/share/qemu/edk2-x86_64-code.fd" \
+        /usr/share/OVMF/OVMF_CODE.fd \
+        /usr/share/edk2/x64/OVMF_CODE.fd \
+        /usr/share/qemu/OVMF.fd; do
+        if [[ -f "$candidate" ]]; then
+          FW_CODE="$candidate"
+          break
+        fi
+      done
+      for vars_candidate in \
+        "$BREW_PREFIX/share/qemu/edk2-i386-vars.fd" \
+        /usr/share/OVMF/OVMF_VARS.fd \
+        /usr/share/edk2/x64/OVMF_VARS.fd; do
+        if [[ -f "$vars_candidate" ]]; then
+          FW_VARS="$vars_candidate"
+          break
+        fi
+      done
+      ;;
+    aarch64)
+      for candidate in \
+        "$BREW_PREFIX/share/qemu/edk2-aarch64-code.fd" \
+        /usr/share/AAVMF/AAVMF_CODE.fd \
+        /usr/share/edk2/aarch64/QEMU_EFI.fd \
+        /usr/share/qemu/edk2-aarch64-code.fd; do
+        if [[ -f "$candidate" ]]; then
+          FW_CODE="$candidate"
+          break
+        fi
+      done
+      for vars_candidate in \
+        "$BREW_PREFIX/share/qemu/edk2-arm-vars.fd" \
+        /usr/share/AAVMF/AAVMF_VARS.fd \
+        /usr/share/edk2/aarch64/QEMU_VARS.fd; do
+        if [[ -f "$vars_candidate" ]]; then
+          FW_VARS="$vars_candidate"
+          break
+        fi
+      done
+      ;;
+  esac
+
+  if [[ -z "$FW_CODE" ]]; then
+    echo "Error: UEFI firmware not found for $GUEST_ARCH."
     echo "It should ship with QEMU. Check your installation."
     exit 1
   fi
+
   # edk2 firmware needs pflash, not -bios
   # Create a temporary writable copy for UEFI vars
-  OVMF_VARS="$(dirname "$OVMF")/edk2-i386-vars.fd"
   VARS_TMP=$(mktemp)
-  cp "$OVMF_VARS" "$VARS_TMP"
+  if [[ -f "$FW_VARS" ]]; then
+    cp "$FW_VARS" "$VARS_TMP"
+  else
+    # Create empty 64MB vars file if template not found
+    truncate -s 64M "$VARS_TMP"
+  fi
   QEMU_ARGS+=(
-    -drive "if=pflash,format=raw,readonly=on,file=$OVMF"
+    -drive "if=pflash,format=raw,readonly=on,file=$FW_CODE"
     -drive "if=pflash,format=raw,file=$VARS_TMP"
   )
 fi
 
-# QEMU monitor socket — enables vm:screenshot and other monitor commands
+# --- QEMU monitor socket ---
 # Named by image basename so multiple VMs can run concurrently.
-# Use TMPDIR on macOS (per-user, system-managed), fall back to /tmp.
-VM_ID="$(basename "$IMAGE" .img)"
+if [[ -n "$CDROM" ]]; then
+  VM_ID="$(basename "$CDROM" .iso)"
+elif [[ -n "$IMAGE" ]]; then
+  VM_ID="$(basename "$IMAGE" .img)"
+else
+  VM_ID="winnie-$$"
+fi
 WINNIE_RUN_DIR="${TMPDIR:-/tmp}/winnie"
 mkdir -p "$WINNIE_RUN_DIR"
 MONITOR_SOCK="$WINNIE_RUN_DIR/$VM_ID.sock"
@@ -86,5 +183,23 @@ if [[ "$HEADLESS" == "true" ]]; then
   QEMU_ARGS+=(-nographic -serial mon:stdio)
 fi
 
-echo "Booting $IMAGE ($(if [[ "$UEFI" == "true" ]]; then echo "UEFI"; else echo "BIOS"; fi), ${MEMORY}MB RAM, ${CPUS} CPUs$(if [[ "$HEADLESS" == "true" ]]; then echo ", headless"; fi)$(if [[ "$NO_NET" == "true" ]]; then echo ", no network"; else echo ", NAT network"; fi))..."
+# --- boot ---
+
+ACCEL_LABEL="$ACCEL"
+[[ "$NATIVE" == "true" ]] && ACCEL_LABEL="$ACCEL (native)"
+
+BOOT_SOURCE="(no disk)"
+[[ -n "$IMAGE" ]] && BOOT_SOURCE="$IMAGE"
+[[ -n "$CDROM" ]] && BOOT_SOURCE="$CDROM (cdrom)"
+
+BOOT_MODE="BIOS"
+[[ "$UEFI" == "true" ]] && BOOT_MODE="UEFI"
+
+NET_MODE="NAT network"
+[[ "$NO_NET" == "true" ]] && NET_MODE="no network"
+
+OPTS="$GUEST_ARCH, $BOOT_MODE, ${MEMORY}MB RAM, ${CPUS} CPUs, $ACCEL_LABEL, $NET_MODE"
+[[ "$HEADLESS" == "true" ]] && OPTS="$OPTS, headless"
+
+echo "Booting $BOOT_SOURCE ($OPTS)..."
 exec "${QEMU_ARGS[@]}"

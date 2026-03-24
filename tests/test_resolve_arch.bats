@@ -62,9 +62,10 @@ setup() {
   [ "$output" = "amd64" ]
 }
 
-@test "resolve_arch pop-os aarch64 fails" {
+@test "resolve_arch pop-os aarch64 maps to arm64" {
   run resolve_arch pop-os aarch64
-  [ "$status" -ne 0 ]
+  [ "$status" -eq 0 ]
+  [ "$output" = "arm64" ]
 }
 
 # --- mint (x86 only) ---
