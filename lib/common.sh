@@ -60,6 +60,8 @@ normalize_arch() {
   esac
 }
 
+# --- vm:boot helpers ---
+
 # Select QEMU accelerator based on host arch, guest arch, and OS.
 # Usage: resolve_accel <host_arch> <guest_arch> <os>
 # Outputs: "hvf", "kvm", or "tcg,thread=multi"
@@ -105,5 +107,56 @@ resolve_cpu() {
 resolve_machine() {
   case "$1" in
     aarch64) echo "virt" ;;
+  esac
+}
+
+# --- disk:format helpers ---
+
+# Docker platform for a given target architecture.
+# Usage: docker_platform <arch>
+docker_platform() {
+  case "$(normalize_arch "${1:-x86_64}")" in
+    aarch64) echo "linux/arm64" ;;
+    *)       echo "linux/amd64" ;;
+  esac
+}
+
+# GRUB apt packages needed for a given architecture.
+# Usage: grub_packages <arch>
+# Returns space-separated package list.
+grub_packages() {
+  local arch
+  arch="$(normalize_arch "${1:-x86_64}")"
+
+  # Common packages for all arches
+  local common="gdisk dosfstools e2fsprogs kpartx grub2-common jq"
+
+  case "$arch" in
+    aarch64)
+      # ARM64: UEFI only (no legacy BIOS on ARM)
+      echo "$common grub-efi-arm64-bin"
+      ;;
+    *)
+      # x86_64: both legacy BIOS and UEFI
+      echo "$common grub-pc-bin grub-efi-amd64-bin"
+      ;;
+  esac
+}
+
+# GRUB install targets for a given architecture.
+# Usage: grub_targets <arch>
+# Returns newline-separated targets (for iteration).
+grub_targets() {
+  local arch
+  arch="$(normalize_arch "${1:-x86_64}")"
+
+  case "$arch" in
+    aarch64)
+      echo "arm64-efi"
+      ;;
+    *)
+      echo "i386-pc"
+      echo "x86_64-efi"
+      ;;
   esac
 }

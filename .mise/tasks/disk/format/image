@@ -3,10 +3,14 @@
 #MISE hide=true
 #USAGE flag "-i --image <path>" help="Output image path" default="disk.img"
 #USAGE flag "-s --size <size>" help="Image size in MB" default="2048"
+#USAGE flag "--arch <arch>" help="Target architecture (default: x86_64)" default=""
 set -euo pipefail
+
+source "$MISE_CONFIG_ROOT/lib/common.sh"
 
 OUTPUT="${usage_image}"
 SIZE="${usage_size}"
+ARCH="$(normalize_arch "${usage_arch:-x86_64}")"
 
 # Preflight
 if ! command -v docker &>/dev/null; then
@@ -20,14 +24,44 @@ if ! docker info &>/dev/null 2>&1; then
   exit 1
 fi
 
+PLATFORM="$(docker_platform "$ARCH")"
+PACKAGES="$(grub_packages "$ARCH")"
+
 # Create raw disk image
 echo "Creating ${SIZE}MB raw disk image at $OUTPUT..."
 dd if=/dev/zero of="$OUTPUT" bs=1M count="$SIZE" status=progress 2>&1
 
 OUTPUT_BASENAME="$(basename "$OUTPUT")"
 
+# Build grub-install commands based on arch
+GRUB_INSTALL_CMDS=""
+while IFS= read -r target; do
+  case "$target" in
+    i386-pc)
+      GRUB_INSTALL_CMDS+="
+echo 'Installing GRUB (Legacy BIOS)...'
+grub-install \\
+  --target=i386-pc \\
+  --boot-directory=\"\$MOUNT_DATA/boot\" \\
+  --removable \\
+  \"\$LOOPDEV\"
+"
+      ;;
+    *-efi)
+      GRUB_INSTALL_CMDS+="
+echo 'Installing GRUB (UEFI: $target)...'
+grub-install \\
+  --target=$target \\
+  --boot-directory=\"\$MOUNT_DATA/boot\" \\
+  --efi-directory=\"\$MOUNT_EFI\" \\
+  --removable
+"
+      ;;
+  esac
+done < <(grub_targets "$ARCH")
+
 docker run --rm --privileged \
-  --platform linux/amd64 \
+  --platform "$PLATFORM" \
   -v "$MISE_CONFIG_ROOT":/repo:ro \
   -v "$(cd "$(dirname "$OUTPUT")" && pwd)":/out \
   -v "$MISE_CONFIG_ROOT/lib/grub-gen.sh":/usr/local/lib/grub-gen.sh:ro \
@@ -36,7 +70,7 @@ set -euo pipefail
 
 echo 'Installing tools...'
 apt-get update -qq
-apt-get install -y -qq gdisk dosfstools e2fsprogs kpartx grub-pc-bin grub-efi-amd64-bin grub2-common jq
+apt-get install -y -qq $PACKAGES
 
 echo 'Setting up loopback device...'
 LOOPDEV=\$(losetup -f --show /out/$OUTPUT_BASENAME)
@@ -66,19 +100,7 @@ MOUNT_EFI=\$(mktemp -d)
 mount \"\$PART_DATA\" \"\$MOUNT_DATA\"
 mount \"\$PART_EFI\" \"\$MOUNT_EFI\"
 
-echo 'Installing GRUB (Legacy BIOS)...'
-grub-install \\
-  --target=i386-pc \\
-  --boot-directory=\"\$MOUNT_DATA/boot\" \\
-  --removable \\
-  \"\$LOOPDEV\"
-
-echo 'Installing GRUB (UEFI)...'
-grub-install \\
-  --target=x86_64-efi \\
-  --boot-directory=\"\$MOUNT_DATA/boot\" \\
-  --efi-directory=\"\$MOUNT_EFI\" \\
-  --removable
+$GRUB_INSTALL_CMDS
 
 mkdir -p \"\$MOUNT_DATA/distros\"
 
@@ -97,7 +119,7 @@ echo 'Done.'
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Image ready: $OUTPUT"
+echo "Image ready: $OUTPUT ($ARCH)"
 echo ""
 echo "Add ISOs with:"
 echo "  winnie disk:add <iso-file> --image $OUTPUT"
