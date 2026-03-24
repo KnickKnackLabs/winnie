@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #MISE description="Show available Linux Mint versions and variants"
 #USAGE flag "-v --version <version>" help="Show variants for a specific version"
+#USAGE flag "--arch <arch>" help="Architecture (default: host)" default=""
 #USAGE flag "--json" help="Output as JSON"
 set -euo pipefail
 
@@ -9,6 +10,8 @@ VERSION="${usage_version:-}"
 JSON="${usage_json:-false}"
 
 source "$MISE_CONFIG_ROOT/lib/common.sh"
+
+resolve_arch mint "${usage_arch:-}" >/dev/null || { echo "Error: Linux Mint does not publish ISOs for architecture '${usage_arch:-$(uname -m)}'. Only x86_64 is available." >&2; exit 1; }
 
 fetch_version_detail() {
   local html sha_content parsed

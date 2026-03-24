@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #MISE description="Show available Debian Live versions and variants"
 #USAGE flag "-v --version <version>" help="Show variants for a specific version"
+#USAGE flag "--arch <arch>" help="Architecture (default: host)" default=""
 #USAGE flag "--json" help="Output as JSON"
 set -euo pipefail
 
@@ -10,23 +11,25 @@ JSON="${usage_json:-false}"
 
 source "$MISE_CONFIG_ROOT/lib/common.sh"
 
+ARCH=$(resolve_arch debian "${usage_arch:-}") || { echo "Error: Debian does not publish live ISOs for architecture '${usage_arch:-$(uname -m)}'." >&2; exit 1; }
+
 fetch_version_detail() {
   local base sha_content
 
   # Current release lives at a different path than archived ones
   local current_version
-  current_version=$(curl -fsSL "$MIRROR/debian-cd/current-live/amd64/iso-hybrid/" | sed -n 's/.*debian-live-\([0-9.]*\)-.*/\1/p' | head -1)
+  current_version=$(curl -fsSL "$MIRROR/debian-cd/current-live/$ARCH/iso-hybrid/" | sed -n 's/.*debian-live-\([0-9.]*\)-.*/\1/p' | head -1)
 
   if [[ "$VERSION" == "$current_version" ]]; then
-    base="$MIRROR/debian-cd/current-live/amd64/iso-hybrid"
+    base="$MIRROR/debian-cd/current-live/$ARCH/iso-hybrid"
   else
-    base="$MIRROR/cdimage/archive/${VERSION}-live/amd64/iso-hybrid"
+    base="$MIRROR/cdimage/archive/${VERSION}-live/$ARCH/iso-hybrid"
   fi
 
   sha_content=$(curl -fsSL "$base/SHA256SUMS" 2>/dev/null) || { echo "Error: version $VERSION not found." >&2; exit 1; }
 
   echo "$sha_content" | grep '\.iso$' | awk '{print $2 "|" $1}' | while IFS='|' read -r filename sha256; do
-    variant=$(echo "$filename" | sed 's/.*amd64-\(.*\)\.iso/\1/')
+    variant=$(echo "$filename" | sed "s/.*${ARCH}-\(.*\)\.iso/\1/")
     echo "$filename|$variant|$sha256"
   done | jq -R --arg base "$base" '
     split("|") | {
@@ -41,7 +44,7 @@ fetch_version_list() {
   local current_html current_version archive_html
 
   # Get current version
-  current_html=$(curl -fsSL "$MIRROR/debian-cd/current-live/amd64/iso-hybrid/")
+  current_html=$(curl -fsSL "$MIRROR/debian-cd/current-live/$ARCH/iso-hybrid/")
   current_version=$(echo "$current_html" | sed -n 's/.*debian-live-\([0-9.]*\)-.*/\1/p' | head -1)
 
   # Get archived versions
@@ -56,7 +59,7 @@ fetch_version_list() {
 }
 
 if [[ -n "$VERSION" ]]; then
-  entries=$(spin "Fetching Debian $VERSION..." bash -c "$(declare -f fetch_version_detail); VERSION='$VERSION' MIRROR='$MIRROR' fetch_version_detail")
+  entries=$(spin "Fetching Debian $VERSION ($ARCH)..." bash -c "$(declare -f fetch_version_detail); VERSION='$VERSION' MIRROR='$MIRROR' ARCH='$ARCH' fetch_version_detail")
 
   if [[ "$JSON" == "true" ]]; then
     echo "$entries" | jq .
@@ -67,7 +70,7 @@ if [[ -n "$VERSION" ]]; then
       | tr -d '"' | gum table -p -w 50,15
   fi
 else
-  entries=$(spin "Fetching Debian versions..." bash -c "$(declare -f fetch_version_list); MIRROR='$MIRROR' fetch_version_list")
+  entries=$(spin "Fetching Debian versions..." bash -c "$(declare -f fetch_version_list); MIRROR='$MIRROR' ARCH='$ARCH' fetch_version_list")
 
   if [[ "$JSON" == "true" ]]; then
     echo "$entries" | jq .
