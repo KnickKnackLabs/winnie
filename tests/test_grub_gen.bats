@@ -11,7 +11,7 @@ setup() {
 
 # Helper: create a fake distro with a manifest
 make_distro() {
-  local slug="$1" title="$2" kernel="$3" initrd="$4" params="${5:-}"
+  local slug="$1" title="$2" kernel="$3" initrd="$4" params="${5:-}" squashfs="${6:-}"
   local dir="$TEST_DIR/distros/$slug"
   mkdir -p "$dir"
   jq -n \
@@ -19,7 +19,7 @@ make_distro() {
     --arg kernel_path "$kernel" \
     --arg initrd_path "$initrd" \
     --arg boot_params "$params" \
-    --arg squashfs_path "" \
+    --arg squashfs_path "$squashfs" \
     '{title: $title, kernel_path: $kernel_path, initrd_path: $initrd_path, boot_params: $boot_params, squashfs_path: $squashfs_path}' \
     > "$dir/manifest.json"
 }
@@ -68,11 +68,25 @@ make_distro() {
 }
 
 @test "grub_generate rewrites live-media-path to extracted location" {
-  make_distro "debian-live" "Debian Live" "live/vmlinuz" "live/initrd.img" "boot=live components live-media-path=/live quiet splash"
+  make_distro "debian-live" "Debian Live" "live/vmlinuz" "live/initrd.img" "boot=live components live-media-path=/live quiet splash" "live/filesystem.squashfs"
   grub_generate "$TEST_DIR"
   local cfg="$TEST_DIR/boot/grub/grub.cfg"
   grep -q 'live-media-path=/distros/debian-live' "$cfg"
   ! grep -q 'live-media-path=/live' "$cfg"
+}
+
+@test "grub_generate adds live-media-path when squashfs present but param missing" {
+  make_distro "debian-std" "Debian Standard" "live/vmlinuz" "live/initrd.img" "boot=live components" "live/filesystem.squashfs"
+  grub_generate "$TEST_DIR"
+  local cfg="$TEST_DIR/boot/grub/grub.cfg"
+  grep -q 'live-media-path=/distros/debian-std' "$cfg"
+}
+
+@test "grub_generate does not add live-media-path when no squashfs" {
+  make_distro "alpine" "Alpine" "boot/vmlinuz-lts" "boot/initramfs-lts" "modules=loop,squashfs quiet"
+  grub_generate "$TEST_DIR"
+  local cfg="$TEST_DIR/boot/grub/grub.cfg"
+  ! grep -q 'live-media-path' "$cfg"
 }
 
 @test "grub_generate omits initrd line when initrd is empty" {

@@ -30,8 +30,18 @@ GRUBHEAD
     # Strip iso-specific params that don't apply to extracted boot
     params=$(echo "$params" | sed 's|findiso=[^ ]*||g; s|iso-scan/filename=[^ ]*||g' | sed 's/  */ /g; s/^ //; s/ $//')
 
-    # Rewrite live-media-path to point at extracted location on the winnie drive
-    params=$(echo "$params" | sed "s|live-media-path=[^ ]*|live-media-path=/distros/$slug|g")
+    # Ensure live-media-path points at the extracted location on the winnie drive.
+    # Some distros include it in their boot params (rewrite), others don't (add).
+    # Only relevant when a squashfs was extracted.
+    local squashfs
+    squashfs=$(jq -r '.squashfs_path // empty' "$manifest")
+    if [[ -n "$squashfs" ]]; then
+      if echo "$params" | grep -q 'live-media-path='; then
+        params=$(echo "$params" | sed "s|live-media-path=[^ ]*|live-media-path=/distros/$slug|g")
+      else
+        params="$params live-media-path=/distros/$slug"
+      fi
+    fi
 
     {
       echo ""
