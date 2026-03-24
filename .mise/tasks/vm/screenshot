@@ -1,14 +1,40 @@
 #!/usr/bin/env bash
 #MISE description="Capture a screenshot from a running winnie VM"
-#USAGE flag "-i --image <path>" help="Disk image path (identifies which VM)" default="disk.img"
+#USAGE flag "--vm <name>" help="VM identifier (image or ISO filename, or name from vm:list)"
 #USAGE flag "-o --output <path>" help="Output file path" default="screenshot.png"
 set -euo pipefail
 
-IMAGE="${usage_image}"
+VM_NAME="${usage_vm:-}"
 OUTPUT="${usage_output}"
 
-VM_ID="$(basename "$IMAGE" .img)"
 WINNIE_RUN_DIR="${TMPDIR:-/tmp}/winnie"
+
+# If no VM specified, try to find exactly one running VM
+if [[ -z "$VM_NAME" ]]; then
+  socks=("$WINNIE_RUN_DIR"/*.sock)
+  live=()
+  for sock in "${socks[@]}"; do
+    [[ -S "$sock" ]] || continue
+    if printf '' | nc -U "$sock" >/dev/null 2>&1; then
+      live+=("$(basename "$sock" .sock)")
+    fi
+  done
+  if [[ ${#live[@]} -eq 0 ]]; then
+    echo "Error: no running VMs found." >&2
+    exit 1
+  elif [[ ${#live[@]} -gt 1 ]]; then
+    echo "Error: multiple VMs running. Specify one with --vm:" >&2
+    printf "  %s\n" "${live[@]}" >&2
+    exit 1
+  fi
+  VM_NAME="${live[0]}"
+fi
+
+# Derive VM_ID: strip common extensions, or use as-is
+VM_ID="$(basename "$VM_NAME")"
+VM_ID="${VM_ID%.img}"
+VM_ID="${VM_ID%.iso}"
+
 MONITOR_SOCK="$WINNIE_RUN_DIR/$VM_ID.sock"
 
 if [[ ! -S "$MONITOR_SOCK" ]]; then
@@ -21,12 +47,11 @@ fi
 OUTPUT="$(cd "$(dirname "$OUTPUT")" && pwd)/$(basename "$OUTPUT")"
 
 # QEMU screendump supports PNG natively (Homebrew QEMU includes libpng)
-# Use nc -U (BSD netcat, ships with macOS) to send the monitor command
 printf 'screendump %s -f png\n' "$OUTPUT" | nc -U "$MONITOR_SOCK" >/dev/null 2>&1
 sleep 0.5
 
 if [[ ! -s "$OUTPUT" ]]; then
-  echo "Error: screenshot failed (empty or missing file)." >&2
+  echo "Error: screenshot failed (empty or missing file). Is a display device attached?" >&2
   exit 1
 fi
 
