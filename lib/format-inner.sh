@@ -68,12 +68,12 @@ for cross in "${CROSS_ARCHES[@]+"${CROSS_ARCHES[@]}"}"; do
   # Build qualified package list (e.g., grub-efi-arm64-bin:arm64)
   local_deb_arch="$(deb_arch "$cross")"
   cross_pkgs=()
-  for pkg in $(grub_packages "$cross"); do
-    case "$pkg" in grub-*-bin) cross_pkgs+=("${pkg}:${local_deb_arch}") ;; esac
+  for pkg in $(grub_only_packages "$cross"); do
+    cross_pkgs+=("${pkg}:${local_deb_arch}")
   done
 
   # apt-get download always writes to cwd, ignoring Dir::Cache::Archives
-  (cd "$cross_dir" && apt-get download "${cross_pkgs[@]}" 2>/dev/null)
+  (cd "$cross_dir" && apt-get download "${cross_pkgs[@]}")
 
   mkdir -p "$cross_dir/extracted"
   for deb in "$cross_dir"/*.deb; do
@@ -164,46 +164,22 @@ for arch in "${ARCHES[@]}"; do
   echo "Installing GRUB for $arch..."
   is_native=$([[ "$arch" == "$NATIVE_ARCH" ]] && echo true || echo false)
 
-  case "$arch" in
-    x86_64)
-      if $is_native; then
-        install_native_grub i386-pc \
-          --target=i386-pc \
-          --boot-directory="$MOUNT_DATA/boot" \
-          --removable "$DISK"
-        install_native_grub x86_64-efi \
-          --target=x86_64-efi \
-          --boot-directory="$MOUNT_DATA/boot" \
-          --efi-directory="$MOUNT_EFI" \
-          --removable
-      else
-        install_cross_grub i386-pc x86_64 \
-          --target=i386-pc \
-          --boot-directory="$MOUNT_DATA/boot" \
-          --removable "$DISK"
-        install_cross_grub x86_64-efi x86_64 \
-          --target=x86_64-efi \
-          --boot-directory="$MOUNT_DATA/boot" \
-          --efi-directory="$MOUNT_EFI" \
-          --removable
-      fi
-      ;;
-    aarch64)
-      if $is_native; then
-        install_native_grub arm64-efi \
-          --target=arm64-efi \
-          --boot-directory="$MOUNT_DATA/boot" \
-          --efi-directory="$MOUNT_EFI" \
-          --removable
-      else
-        install_cross_grub arm64-efi aarch64 \
-          --target=arm64-efi \
-          --boot-directory="$MOUNT_DATA/boot" \
-          --efi-directory="$MOUNT_EFI" \
-          --removable
-      fi
-      ;;
-  esac
+  while IFS= read -r target; do
+    args=(--target="$target" --boot-directory="$MOUNT_DATA/boot" --removable)
+
+    if [[ "$target" == *-efi ]]; then
+      args+=(--efi-directory="$MOUNT_EFI")
+    else
+      # BIOS targets need the disk device
+      args+=("$DISK")
+    fi
+
+    if $is_native; then
+      install_native_grub "$target" "${args[@]}"
+    else
+      install_cross_grub "$target" "$arch" "${args[@]}"
+    fi
+  done < <(grub_targets "$arch")
 done
 
 # --- Finalize ---

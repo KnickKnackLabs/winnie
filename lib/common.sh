@@ -140,6 +140,23 @@ deb_arch() {
   esac
 }
 
+# GRUB-specific apt packages for an architecture (without common tools).
+# Usage: grub_only_packages <arch>
+# Returns space-separated package list (grub bins only).
+grub_only_packages() {
+  local arch
+  arch="$(normalize_arch "${1:-x86_64}")"
+
+  case "$arch" in
+    aarch64)
+      echo "grub-efi-arm64-bin"
+      ;;
+    *)
+      echo "grub-pc-bin grub-efi-amd64-bin"
+      ;;
+  esac
+}
+
 # GRUB apt packages needed for a given architecture.
 # Usage: grub_packages <arch>
 # Returns space-separated package list.

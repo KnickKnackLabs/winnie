@@ -1,7 +1,7 @@
 #!/usr/bin/env bats
 
 # Tests for disk:format architecture helpers in lib/common.sh:
-# grub_packages, grub_targets, parse_arch_flags, deb_arch
+# grub_packages, grub_only_packages, grub_targets, parse_arch_flags, deb_arch
 
 load test_helper
 
@@ -87,6 +87,28 @@ setup() {
 @test "deb_arch normalizes before mapping" {
   run deb_arch arm64
   [ "$output" = "arm64" ]
+}
+
+# --- grub_only_packages ---
+
+@test "grub_only_packages x86_64 includes pc and efi-amd64" {
+  run grub_only_packages x86_64
+  [[ "$output" == *"grub-pc-bin"* ]]
+  [[ "$output" == *"grub-efi-amd64-bin"* ]]
+}
+
+@test "grub_only_packages aarch64 is efi-arm64 only" {
+  run grub_only_packages aarch64
+  [ "$output" = "grub-efi-arm64-bin" ]
+}
+
+@test "grub_only_packages does not include common tools" {
+  for arch in x86_64 aarch64; do
+    run grub_only_packages "$arch"
+    [[ "$output" != *"gdisk"* ]]
+    [[ "$output" != *"kpartx"* ]]
+    [[ "$output" != *"jq"* ]]
+  done
 }
 
 # --- grub_packages ---
