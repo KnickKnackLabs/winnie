@@ -1,7 +1,7 @@
 #!/usr/bin/env bats
 
 # Tests for disk:format architecture helpers in lib/common.sh:
-# docker_platform, grub_packages, grub_targets, parse_arch_flags, deb_arch
+# grub_packages, grub_targets, parse_arch_flags, deb_arch
 
 load test_helper
 
@@ -87,28 +87,6 @@ setup() {
 @test "deb_arch normalizes before mapping" {
   run deb_arch arm64
   [ "$output" = "arm64" ]
-}
-
-# --- docker_platform ---
-
-@test "docker_platform x86_64 returns linux/amd64" {
-  run docker_platform x86_64
-  [ "$output" = "linux/amd64" ]
-}
-
-@test "docker_platform aarch64 returns linux/arm64" {
-  run docker_platform aarch64
-  [ "$output" = "linux/arm64" ]
-}
-
-@test "docker_platform arm64 normalizes to linux/arm64" {
-  run docker_platform arm64
-  [ "$output" = "linux/arm64" ]
-}
-
-@test "docker_platform defaults to linux/amd64" {
-  run docker_platform ""
-  [ "$output" = "linux/amd64" ]
 }
 
 # --- grub_packages ---

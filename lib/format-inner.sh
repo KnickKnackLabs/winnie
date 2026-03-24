@@ -12,6 +12,9 @@
 # In device mode, <block-device> is the full device path (e.g., /dev/sdb).
 set -euo pipefail
 
+# shellcheck source=common.sh
+source /repo/lib/common.sh
+
 MODE="$1"; shift
 TARGET="$1"; shift
 ARCHES=("$@")
@@ -19,38 +22,33 @@ ARCHES=("$@")
 # --- Detect container architecture ---
 
 NATIVE_DEB_ARCH="$(dpkg --print-architecture)"
-case "$NATIVE_DEB_ARCH" in
-  amd64) NATIVE_ARCH="x86_64" ;;
-  arm64) NATIVE_ARCH="aarch64" ;;
-  *)     NATIVE_ARCH="$NATIVE_DEB_ARCH" ;;
-esac
+NATIVE_ARCH="$(normalize_arch "$NATIVE_DEB_ARCH")"
 
 echo "Container arch: $NATIVE_DEB_ARCH ($NATIVE_ARCH)"
 echo "Target arches: ${ARCHES[*]}"
 
 # --- Collect native packages and identify cross-arch targets ---
 
-NATIVE_PACKAGES="gdisk dosfstools e2fsprogs kpartx grub2-common jq"
+NATIVE_PACKAGES=""
 CROSS_ARCHES=()
 
 for arch in "${ARCHES[@]}"; do
   if [[ "$arch" == "$NATIVE_ARCH" ]]; then
-    case "$arch" in
-      x86_64)  NATIVE_PACKAGES+=" grub-pc-bin grub-efi-amd64-bin" ;;
-      aarch64) NATIVE_PACKAGES+=" grub-efi-arm64-bin" ;;
-    esac
+    NATIVE_PACKAGES="$(grub_packages "$arch")"
   else
     CROSS_ARCHES+=("$arch")
   fi
 done
 
+# If no native arch requested, still need base tools
+if [[ -z "$NATIVE_PACKAGES" ]]; then
+  NATIVE_PACKAGES="gdisk dosfstools e2fsprogs kpartx grub2-common jq"
+fi
+
 # --- Add foreign dpkg architectures if needed ---
 
 for cross in "${CROSS_ARCHES[@]+"${CROSS_ARCHES[@]}"}"; do
-  case "$cross" in
-    x86_64)  dpkg --add-architecture amd64 ;;
-    aarch64) dpkg --add-architecture arm64 ;;
-  esac
+  dpkg --add-architecture "$(deb_arch "$cross")"
 done
 
 # --- Install native packages ---
@@ -67,16 +65,15 @@ for cross in "${CROSS_ARCHES[@]+"${CROSS_ARCHES[@]}"}"; do
   cross_dir="/tmp/cross-$cross"
   mkdir -p "$cross_dir"
 
-  case "$cross" in
-    x86_64)
-      apt-get download -o Dir::Cache::Archives="$cross_dir" \
-        grub-pc-bin:amd64 grub-efi-amd64-bin:amd64 2>/dev/null
-      ;;
-    aarch64)
-      apt-get download -o Dir::Cache::Archives="$cross_dir" \
-        grub-efi-arm64-bin:arm64 2>/dev/null
-      ;;
-  esac
+  # Build qualified package list (e.g., grub-efi-arm64-bin:arm64)
+  local_deb_arch="$(deb_arch "$cross")"
+  cross_pkgs=()
+  for pkg in $(grub_packages "$cross"); do
+    case "$pkg" in grub-*-bin) cross_pkgs+=("${pkg}:${local_deb_arch}") ;; esac
+  done
+
+  # apt-get download always writes to cwd, ignoring Dir::Cache::Archives
+  (cd "$cross_dir" && apt-get download "${cross_pkgs[@]}" 2>/dev/null)
 
   mkdir -p "$cross_dir/extracted"
   for deb in "$cross_dir"/*.deb; do

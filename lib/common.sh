@@ -140,15 +140,6 @@ deb_arch() {
   esac
 }
 
-# Docker platform for a given target architecture.
-# Usage: docker_platform <arch>
-docker_platform() {
-  case "$(normalize_arch "${1:-x86_64}")" in
-    aarch64) echo "linux/arm64" ;;
-    *)       echo "linux/amd64" ;;
-  esac
-}
-
 # GRUB apt packages needed for a given architecture.
 # Usage: grub_packages <arch>
 # Returns space-separated package list.
