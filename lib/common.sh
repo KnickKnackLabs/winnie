@@ -60,6 +60,8 @@ normalize_arch() {
   esac
 }
 
+# --- vm:boot helpers ---
+
 # Select QEMU accelerator based on host arch, guest arch, and OS.
 # Usage: resolve_accel <host_arch> <guest_arch> <os>
 # Outputs: "hvf", "kvm", or "tcg,thread=multi"
@@ -105,5 +107,83 @@ resolve_cpu() {
 resolve_machine() {
   case "$1" in
     aarch64) echo "virt" ;;
+  esac
+}
+
+# --- disk:format helpers ---
+
+# All supported boot architectures.
+ALL_ARCHES=(x86_64 aarch64)
+
+# Parse variadic --arch flags into normalized arch names, one per line.
+# If input is empty, outputs all supported arches.
+# Usage: parse_arch_flags "$usage_arch"
+# Uses the safe xargs pattern for mise var=#true strings.
+parse_arch_flags() {
+  local raw="${1:-}"
+  if [[ -z "$raw" ]]; then
+    printf '%s\n' "${ALL_ARCHES[@]}"
+    return
+  fi
+  while IFS= read -r arch; do
+    normalize_arch "$arch"
+  done < <(printf '%s' "$raw" | xargs printf '%s\n')
+}
+
+# Map a normalized arch to the Debian dpkg architecture name.
+# Usage: deb_arch <arch>
+deb_arch() {
+  case "$(normalize_arch "${1:-}")" in
+    x86_64)  echo "amd64" ;;
+    aarch64) echo "arm64" ;;
+    *)       echo "$1" ;;
+  esac
+}
+
+# Common packages needed for any disk:format operation (arch-independent).
+GRUB_COMMON_PACKAGES="gdisk dosfstools e2fsprogs kpartx grub2-common jq"
+
+# GRUB-specific apt packages for an architecture (without common tools).
+# Usage: grub_only_packages <arch>
+# Returns space-separated package list (grub bins only).
+grub_only_packages() {
+  local arch
+  arch="$(normalize_arch "${1:-x86_64}")"
+
+  case "$arch" in
+    aarch64)
+      echo "grub-efi-arm64-bin"
+      ;;
+    *)
+      echo "grub-pc-bin grub-efi-amd64-bin"
+      ;;
+  esac
+}
+
+# GRUB apt packages needed for a given architecture.
+# Usage: grub_packages <arch>
+# Returns space-separated package list.
+grub_packages() {
+  local arch
+  arch="$(normalize_arch "${1:-x86_64}")"
+
+  echo "$GRUB_COMMON_PACKAGES $(grub_only_packages "$arch")"
+}
+
+# GRUB install targets for a given architecture.
+# Usage: grub_targets <arch>
+# Returns newline-separated targets (for iteration).
+grub_targets() {
+  local arch
+  arch="$(normalize_arch "${1:-x86_64}")"
+
+  case "$arch" in
+    aarch64)
+      echo "arm64-efi"
+      ;;
+    *)
+      echo "i386-pc"
+      echo "x86_64-efi"
+      ;;
   esac
 }

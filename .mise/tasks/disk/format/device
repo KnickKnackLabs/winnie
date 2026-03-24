@@ -2,11 +2,20 @@
 #MISE description="Format a block device as a winnie multiboot drive"
 #MISE hide=true
 #USAGE flag "-d --device <device>" help="Block device (e.g., /dev/sdb)" required
+#USAGE flag "--arch <arch>" help="Target architectures (default: all)" var=#true
 #USAGE flag "-y --yes" help="Skip confirmation prompt"
 set -euo pipefail
 
+source "$MISE_CONFIG_ROOT/lib/common.sh"
+
 DEVICE="${usage_device}"
 SKIP_CONFIRM="${usage_yes:-false}"
+
+# Parse arch filter — default is all arches
+ARCHES=()
+while IFS= read -r arch; do
+  ARCHES+=("$arch")
+done < <(parse_arch_flags "${usage_arch:-}")
 
 LABEL="WINNIE"
 BIOS_BOOT_SIZE="2M"
@@ -15,29 +24,18 @@ EFI_SIZE="256M"
 # ── Preflight checks ──────────────────────────────────────────────
 
 if [[ "$(uname)" != "Linux" ]]; then
-  echo "Error: format requires Linux (grub-install, sgdisk, mkfs)."
+  echo "Error: device formatting requires Linux."
   exit 1
 fi
 
-if [[ $EUID -ne 0 ]]; then
-  echo "Error: format must run as root (need access to block devices)."
-  echo "Try: sudo mise run disk:format -d $DEVICE"
+if ! command -v docker &>/dev/null; then
+  echo "Error: docker is required for disk:format --device."
+  echo "Install Docker Desktop or Docker Engine."
   exit 1
 fi
 
-# Check required tools
-missing=()
-for cmd in sgdisk mkfs.fat mkfs.ext4 grub-install partprobe; do
-  if ! command -v "$cmd" &>/dev/null; then
-    missing+=("$cmd")
-  fi
-done
-if [[ ${#missing[@]} -gt 0 ]]; then
-  echo "Error: missing required tools: ${missing[*]}"
-  echo ""
-  echo "On Debian/Ubuntu:  apt install gdisk dosfstools e2fsprogs grub-pc-bin grub-efi-amd64-bin"
-  echo "On Fedora:         dnf install gdisk dosfstools e2fsprogs grub2-pc-modules grub2-efi-x64-modules"
-  echo "On Arch:           pacman -S gptfdisk dosfstools e2fsprogs grub"
+if ! docker info &>/dev/null 2>&1; then
+  echo "Error: Docker daemon is not running."
   exit 1
 fi
 
@@ -57,7 +55,8 @@ if [[ -f "$removable_path" ]]; then
   fi
 fi
 
-# Show what we're about to do
+# ── Confirmation ──────────────────────────────────────────────────
+
 echo "winnie: format"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
@@ -67,6 +66,8 @@ echo "This will DESTROY all data on $DEVICE and create:"
 echo "  Part 1: BIOS Boot     ($BIOS_BOOT_SIZE)"
 echo "  Part 2: EFI System    ($EFI_SIZE, FAT32)"
 echo "  Part 3: Data          (remaining, ext4, label: $LABEL)"
+echo ""
+echo "GRUB targets: ${ARCHES[*]}"
 echo ""
 
 if [[ "$SKIP_CONFIRM" != "true" ]]; then
@@ -90,75 +91,16 @@ for part in "${DEVICE}"*; do
   fi
 done
 
-# ── Partition ─────────────────────────────────────────────────────
+# ── Format via Docker ─────────────────────────────────────────────
 
-echo "Creating GPT partition table..."
-sgdisk --zap-all "$DEVICE"
-sgdisk \
-  --new=1:2048:+${BIOS_BOOT_SIZE}  --typecode=1:ef02  --change-name=1:"BIOS Boot" \
-  --new=2:0:+${EFI_SIZE}           --typecode=2:ef00  --change-name=2:"EFI System" \
-  --new=3:0:0                      --typecode=3:8300  --change-name=3:"$LABEL" \
-  "$DEVICE"
-
-# Let kernel re-read partition table
-partprobe "$DEVICE"
-sleep 1
-
-# Determine partition device names (handles both /dev/sdX1 and /dev/nvme0n1p1 patterns)
-if [[ "$DEVICE" =~ [0-9]$ ]]; then
-  PART_PREFIX="${DEVICE}p"
-else
-  PART_PREFIX="${DEVICE}"
-fi
-PART_EFI="${PART_PREFIX}2"
-PART_DATA="${PART_PREFIX}3"
-
-# ── Format ────────────────────────────────────────────────────────
-
-echo "Formatting EFI partition (FAT32)..."
-mkfs.fat -F 32 -n "EFI" "$PART_EFI"
-
-echo "Formatting data partition (ext4)..."
-mkfs.ext4 -L "$LABEL" -q "$PART_DATA"
-
-# ── Mount ─────────────────────────────────────────────────────────
-
-MOUNT_DATA=$(mktemp -d)
-MOUNT_EFI=$(mktemp -d)
-trap 'umount "$MOUNT_EFI" 2>/dev/null; umount "$MOUNT_DATA" 2>/dev/null; rmdir "$MOUNT_EFI" "$MOUNT_DATA" 2>/dev/null' EXIT
-
-mount "$PART_DATA" "$MOUNT_DATA"
-mount "$PART_EFI" "$MOUNT_EFI"
-
-# ── Install GRUB ─────────────────────────────────────────────────
-
-echo "Installing GRUB for Legacy BIOS..."
-grub-install \
-  --target=i386-pc \
-  --boot-directory="$MOUNT_DATA/boot" \
-  --removable \
-  "$DEVICE"
-
-echo "Installing GRUB for UEFI..."
-grub-install \
-  --target=x86_64-efi \
-  --boot-directory="$MOUNT_DATA/boot" \
-  --efi-directory="$MOUNT_EFI" \
-  --removable
-
-# ── Create distros directory ──────────────────────────────────────
-
-mkdir -p "$MOUNT_DATA/distros"
-
-echo "Generating initial grub.cfg..."
-source "$MISE_CONFIG_ROOT/lib/grub-gen.sh"
-grub_generate "$MOUNT_DATA"
-
-# ── Done ──────────────────────────────────────────────────────────
+docker run --rm --privileged \
+  -v "$MISE_CONFIG_ROOT":/repo:ro \
+  debian:bookworm \
+  bash /repo/lib/format-inner.sh device "$DEVICE" "${ARCHES[@]}"
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "winnie: $DEVICE is ready!"
+echo "winnie: $DEVICE is ready! (${ARCHES[*]})"
 echo ""
 echo "Next steps:"
 echo "  winnie disk:add <iso-file> -d $DEVICE"
