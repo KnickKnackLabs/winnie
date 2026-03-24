@@ -31,7 +31,7 @@ fi
 
 # Create raw disk image
 echo "Creating ${SIZE}MB raw disk image at $OUTPUT..."
-dd if=/dev/zero of="$OUTPUT" bs=1M count="$SIZE" status=progress 2>&1
+dd if=/dev/zero of="$OUTPUT" bs=1048576 count="$SIZE" status=progress 2>&1
 
 OUTPUT_BASENAME="$(basename "$OUTPUT")"
 

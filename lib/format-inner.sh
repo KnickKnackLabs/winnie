@@ -143,6 +143,16 @@ MOUNT_EFI=$(mktemp -d)
 mount "$PART_DATA" "$MOUNT_DATA"
 mount "$PART_EFI" "$MOUNT_EFI"
 
+cleanup() {
+  umount "$MOUNT_EFI" 2>/dev/null || true
+  umount "$MOUNT_DATA" 2>/dev/null || true
+  if $USE_KPARTX; then
+    kpartx -dv "$DISK" 2>/dev/null || true
+    losetup -d "$DISK" 2>/dev/null || true
+  fi
+}
+trap cleanup EXIT
+
 # --- Install GRUB for each architecture ---
 
 install_native_grub() {
