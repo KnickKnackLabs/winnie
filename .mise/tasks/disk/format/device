@@ -2,11 +2,20 @@
 #MISE description="Format a block device as a winnie multiboot drive"
 #MISE hide=true
 #USAGE flag "-d --device <device>" help="Block device (e.g., /dev/sdb)" required
+#USAGE flag "--arch <arch>" help="Target architecture (default: x86_64)" default=""
 #USAGE flag "-y --yes" help="Skip confirmation prompt"
 set -euo pipefail
 
+source "$MISE_CONFIG_ROOT/lib/common.sh"
+
 DEVICE="${usage_device}"
 SKIP_CONFIRM="${usage_yes:-false}"
+ARCH="$(normalize_arch "${usage_arch:-x86_64}")"
+
+if [[ "$ARCH" != "x86_64" ]]; then
+  echo "Error: disk:format:device only supports x86_64 (got: $ARCH)" >&2
+  exit 1
+fi
 
 LABEL="WINNIE"
 BIOS_BOOT_SIZE="2M"
