@@ -110,6 +110,76 @@ resolve_machine() {
   esac
 }
 
+# --- vm helpers ---
+
+WINNIE_RUN_DIR="${TMPDIR:-/tmp}/winnie"
+
+# Resolve a VM identifier to VM_ID and MONITOR_SOCK.
+# Auto-detects if exactly one VM is running; errors on zero or ambiguity.
+# Usage: resolve_vm [name]
+# Sets: VM_ID, MONITOR_SOCK
+resolve_vm() {
+  local vm_name="${1:-}"
+
+  if [[ -z "$vm_name" ]]; then
+    shopt -s nullglob
+    local socks=("$WINNIE_RUN_DIR"/*.sock)
+    shopt -u nullglob
+    local live=()
+    for sock in "${socks[@]}"; do
+      [[ -S "$sock" ]] || continue
+      if printf '' | socat - "UNIX-CONNECT:$sock" >/dev/null 2>&1; then
+        live+=("$(basename "$sock" .sock)")
+      fi
+    done
+    if [[ ${#live[@]} -eq 0 ]]; then
+      echo "Error: no running VMs found." >&2
+      return 1
+    elif [[ ${#live[@]} -gt 1 ]]; then
+      echo "Error: multiple VMs running. Specify one with --vm:" >&2
+      printf "  %s\n" "${live[@]}" >&2
+      return 1
+    fi
+    vm_name="${live[0]}"
+  fi
+
+  VM_ID="$(basename "$vm_name")"
+  VM_ID="${VM_ID%.img}"
+  VM_ID="${VM_ID%.iso}"
+
+  MONITOR_SOCK="$WINNIE_RUN_DIR/$VM_ID.sock"
+
+  if [[ ! -S "$MONITOR_SOCK" ]]; then
+    echo "Error: no running VM found for $VM_ID" >&2
+    echo "Is it booted? Check: winnie vm:list" >&2
+    return 1
+  fi
+}
+
+# Find the PID of the QEMU process for a resolved VM.
+# Usage: resolve_vm_pid
+# Requires: MONITOR_SOCK to be set (via resolve_vm).
+# Sets: QEMU_PID
+resolve_vm_pid() {
+  QEMU_PID="$(pgrep -f "unix:$MONITOR_SOCK" 2>/dev/null | head -1)" || true
+  if [[ -z "$QEMU_PID" ]]; then
+    echo "Error: could not find QEMU process for $VM_ID" >&2
+    return 1
+  fi
+}
+
+# Send a command to the QEMU monitor and return clean output.
+# Usage: monitor_cmd <command>
+# Requires: MONITOR_SOCK to be set (via resolve_vm).
+monitor_cmd() {
+  printf '%s\n' "$1" | socat -t 1 - "UNIX-CONNECT:$MONITOR_SOCK" 2>/dev/null \
+    | tr -d '\r' \
+    | sed 's/\x1b\[[0-9;]*[a-zA-Z]//g; s/\x1b\[[0-9]*[A-Z]//g' \
+    | grep -v '^(qemu)' \
+    | grep -v '^QEMU' \
+    | grep -v '^$'
+}
+
 # --- formatting helpers ---
 
 # Format bytes to human-readable.
@@ -143,26 +213,26 @@ human_uptime() {
   fi
 
   # Remaining is HH:MM:SS, MM:SS, or SS
-  IFS=: read -ra parts <<< "$etime"
-  case ${#parts[@]} in
-    3) hours="${parts[0]}" mins="${parts[1]}" secs="${parts[2]}" ;;
-    2) mins="${parts[0]}" secs="${parts[1]}" ;;
-    1) secs="${parts[0]}" ;;
+  IFS=: read -ra segments <<< "$etime"
+  case ${#segments[@]} in
+    3) hours="${segments[0]}" mins="${segments[1]}" secs="${segments[2]}" ;;
+    2) mins="${segments[0]}" secs="${segments[1]}" ;;
+    1) secs="${segments[0]}" ;;
   esac
 
   # Strip leading zeros for arithmetic
   days=$((10#$days)) hours=$((10#$hours)) mins=$((10#$mins)) secs=$((10#$secs))
 
-  local parts=()
-  [[ $days -gt 0 ]] && parts+=("${days}d")
-  [[ $hours -gt 0 ]] && parts+=("${hours}h")
-  [[ $mins -gt 0 ]] && parts+=("${mins}m")
+  local out=()
+  [[ $days -gt 0 ]] && out+=("${days}d")
+  [[ $hours -gt 0 ]] && out+=("${hours}h")
+  [[ $mins -gt 0 ]] && out+=("${mins}m")
   # Only show seconds if uptime < 1 minute
-  if [[ ${#parts[@]} -eq 0 ]]; then
-    parts+=("${secs}s")
+  if [[ ${#out[@]} -eq 0 ]]; then
+    out+=("${secs}s")
   fi
 
-  echo "${parts[*]}"
+  echo "${out[*]}"
 }
 
 # --- disk:format helpers ---
