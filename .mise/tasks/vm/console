@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+#MISE description="Attach to the QEMU monitor console of a running winnie VM"
+#USAGE flag "--vm <name>" help="VM identifier (from vm:list)"
+set -euo pipefail
+
+source "$MISE_CONFIG_ROOT/lib/common.sh"
+
+resolve_vm "${usage_vm:-}"
+
+if [[ -t 0 ]]; then
+  # Interactive: TTY attached, use socat STDIO for console experience
+  echo "Connecting to $VM_ID monitor console..."
+  echo "Type 'help' for commands, Ctrl-C to detach."
+  echo
+  exec socat - "UNIX-CONNECT:$MONITOR_SOCK"
+else
+  # Non-interactive: read commands from stdin, return clean output
+  while IFS= read -r cmd; do
+    monitor_cmd "$cmd"
+  done
+fi

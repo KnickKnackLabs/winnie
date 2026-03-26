@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+#MISE description="Report resource usage for a running winnie VM"
+#USAGE flag "--vm <name>" help="VM identifier (from vm:list)"
+#USAGE flag "--json" help="Machine-readable JSON output"
+set -euo pipefail
+
+source "$MISE_CONFIG_ROOT/lib/common.sh"
+
+JSON="${usage_json:-false}"
+
+resolve_vm "${usage_vm:-}"
+resolve_vm_pid
+
+# --- collect data ---
+
+# Process stats from ps
+read -r PID RSS_KB CPU_PCT MEM_PCT ETIME < <(ps -p "$QEMU_PID" -o pid=,rss=,%cpu=,%mem=,etime= 2>/dev/null)
+RSS_BYTES=$((RSS_KB * 1024))
+
+# QEMU monitor: status
+VM_STATUS="$(monitor_cmd 'info status' | sed 's/^VM status: //')"
+
+# QEMU monitor: CPUs
+CPUS_RAW="$(monitor_cmd 'info cpus')"
+NUM_CPUS="$(echo "$CPUS_RAW" | grep -c 'CPU #')"
+
+# QEMU monitor: block stats (primary disk only)
+BLOCKSTATS_RAW="$(monitor_cmd 'info blockstats')"
+DISK_LINE="$(echo "$BLOCKSTATS_RAW" | grep '^virtio' | head -1)" || true
+
+RD_BYTES=0 WR_BYTES=0 RD_OPS=0 WR_OPS=0
+if [[ -n "$DISK_LINE" ]]; then
+  RD_BYTES="$(echo "$DISK_LINE" | grep -o 'rd_bytes=[0-9]*' | cut -d= -f2)"
+  WR_BYTES="$(echo "$DISK_LINE" | grep -o 'wr_bytes=[0-9]*' | cut -d= -f2)"
+  RD_OPS="$(echo "$DISK_LINE" | grep -o 'rd_operations=[0-9]*' | cut -d= -f2)"
+  WR_OPS="$(echo "$DISK_LINE" | grep -o 'wr_operations=[0-9]*' | cut -d= -f2)"
+fi
+
+# --- output ---
+
+if [[ "$JSON" == "true" ]]; then
+  jq -n \
+    --arg vm "$VM_ID" \
+    --arg status "$VM_STATUS" \
+    --argjson pid "$QEMU_PID" \
+    --argjson cpus "$NUM_CPUS" \
+    --argjson rss_kb "$RSS_KB" \
+    --arg cpu_pct "$CPU_PCT" \
+    --arg mem_pct "$MEM_PCT" \
+    --arg uptime "$ETIME" \
+    --argjson rd_bytes "${RD_BYTES:-0}" \
+    --argjson wr_bytes "${WR_BYTES:-0}" \
+    --argjson rd_ops "${RD_OPS:-0}" \
+    --argjson wr_ops "${WR_OPS:-0}" \
+    '{
+      vm: $vm,
+      status: $status,
+      pid: $pid,
+      cpus: $cpus,
+      memory: { rss_kb: $rss_kb },
+      host: { cpu_pct: ($cpu_pct | tonumber), mem_pct: ($mem_pct | tonumber) },
+      uptime: $uptime,
+      disk_io: { rd_bytes: $rd_bytes, wr_bytes: $wr_bytes, rd_ops: $rd_ops, wr_ops: $wr_ops }
+    }'
+else
+  gum style --bold "$VM_ID"
+  {
+    printf 'Status\t%s\n' "$VM_STATUS"
+    printf 'PID\t%s\n' "$QEMU_PID"
+    printf 'Uptime\t%s\n' "$(human_uptime "$ETIME")"
+    printf 'Guest CPUs\t%s\n' "$NUM_CPUS"
+    printf 'Host CPU\t%s%%\n' "$CPU_PCT"
+    printf 'Host Mem\t%s%% (RSS: %s)\n' "$MEM_PCT" "$(human_bytes "$RSS_BYTES")"
+  } | gum table -p --separator "	"
+
+  echo
+  gum style --bold "Disk I/O (primary)"
+  {
+    printf 'Direction\tBytes\tOps\n'
+    printf 'Read\t%s\t%s\n' "$(human_bytes "${RD_BYTES:-0}")" "${RD_OPS:-0}"
+    printf 'Write\t%s\t%s\n' "$(human_bytes "${WR_BYTES:-0}")" "${WR_OPS:-0}"
+  } | gum table -p --separator "	"
+fi

@@ -4,46 +4,11 @@
 #USAGE flag "-o --output <path>" help="Output file path" default="screenshot.png"
 set -euo pipefail
 
-VM_NAME="${usage_vm:-}"
+source "$MISE_CONFIG_ROOT/lib/common.sh"
+
 OUTPUT="${usage_output}"
 
-WINNIE_RUN_DIR="${TMPDIR:-/tmp}/winnie"
-
-# If no VM specified, try to find exactly one running VM
-if [[ -z "$VM_NAME" ]]; then
-  shopt -s nullglob
-  socks=("$WINNIE_RUN_DIR"/*.sock)
-  shopt -u nullglob
-  live=()
-  for sock in "${socks[@]}"; do
-    [[ -S "$sock" ]] || continue
-    if printf '' | socat - "UNIX-CONNECT:$sock" >/dev/null 2>&1; then
-      live+=("$(basename "$sock" .sock)")
-    fi
-  done
-  if [[ ${#live[@]} -eq 0 ]]; then
-    echo "Error: no running VMs found." >&2
-    exit 1
-  elif [[ ${#live[@]} -gt 1 ]]; then
-    echo "Error: multiple VMs running. Specify one with --vm:" >&2
-    printf "  %s\n" "${live[@]}" >&2
-    exit 1
-  fi
-  VM_NAME="${live[0]}"
-fi
-
-# Derive VM_ID: strip common extensions, or use as-is
-VM_ID="$(basename "$VM_NAME")"
-VM_ID="${VM_ID%.img}"
-VM_ID="${VM_ID%.iso}"
-
-MONITOR_SOCK="$WINNIE_RUN_DIR/$VM_ID.sock"
-
-if [[ ! -S "$MONITOR_SOCK" ]]; then
-  echo "Error: no running VM found for $VM_ID" >&2
-  echo "Is it booted? Check: winnie vm:list" >&2
-  exit 1
-fi
+resolve_vm "${usage_vm:-}"
 
 # Resolve to absolute path (QEMU writes relative to its own cwd)
 OUTPUT="$(cd "$(dirname "$OUTPUT")" && pwd)/$(basename "$OUTPUT")"

@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+#MISE description="Stop a running winnie VM"
+#USAGE flag "--vm <name>" help="VM identifier (from vm:list)"
+set -euo pipefail
+
+source "$MISE_CONFIG_ROOT/lib/common.sh"
+
+resolve_vm "${usage_vm:-}"
+resolve_vm_pid
+
+# Send quit command via QEMU monitor (graceful shutdown)
+if ! printf 'quit\n' | socat - "UNIX-CONNECT:$MONITOR_SOCK" >/dev/null 2>&1; then
+  echo "Error: failed to send quit command to $VM_ID" >&2
+  exit 1
+fi
+
+# Wait up to 5s for QEMU process to exit
+for _ in {1..10}; do
+  kill -0 "$QEMU_PID" 2>/dev/null || break
+  sleep 0.5
+done
+
+if kill -0 "$QEMU_PID" 2>/dev/null; then
+  echo "Error: $VM_ID (pid $QEMU_PID) did not exit after quit" >&2
+  exit 1
+fi
+
+echo "Stopped $VM_ID"
