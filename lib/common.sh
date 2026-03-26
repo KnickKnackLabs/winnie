@@ -110,6 +110,61 @@ resolve_machine() {
   esac
 }
 
+# --- formatting helpers ---
+
+# Format bytes to human-readable.
+# Usage: human_bytes <bytes>
+human_bytes() {
+  local bytes="$1"
+  if [[ "$bytes" -ge 1073741824 ]]; then
+    printf '%.1f GB' "$(echo "$bytes / 1073741824" | bc -l)"
+  elif [[ "$bytes" -ge 1048576 ]]; then
+    printf '%.1f MB' "$(echo "$bytes / 1048576" | bc -l)"
+  elif [[ "$bytes" -ge 1024 ]]; then
+    printf '%.1f KB' "$(echo "$bytes / 1024" | bc -l)"
+  else
+    printf '%d B' "$bytes"
+  fi
+}
+
+# Format ps etime (DD-HH:MM:SS, HH:MM:SS, MM:SS, or SS) to human-readable.
+# Usage: human_uptime <etime>
+human_uptime() {
+  local etime="$1"
+  local days=0 hours=0 mins=0 secs=0
+
+  # Strip leading whitespace
+  etime="${etime#"${etime%%[![:space:]]*}"}"
+
+  # Split off days if present (DD-...)
+  if [[ "$etime" == *-* ]]; then
+    days="${etime%%-*}"
+    etime="${etime#*-}"
+  fi
+
+  # Remaining is HH:MM:SS, MM:SS, or SS
+  IFS=: read -ra parts <<< "$etime"
+  case ${#parts[@]} in
+    3) hours="${parts[0]}" mins="${parts[1]}" secs="${parts[2]}" ;;
+    2) mins="${parts[0]}" secs="${parts[1]}" ;;
+    1) secs="${parts[0]}" ;;
+  esac
+
+  # Strip leading zeros for arithmetic
+  days=$((10#$days)) hours=$((10#$hours)) mins=$((10#$mins)) secs=$((10#$secs))
+
+  local parts=()
+  [[ $days -gt 0 ]] && parts+=("${days}d")
+  [[ $hours -gt 0 ]] && parts+=("${hours}h")
+  [[ $mins -gt 0 ]] && parts+=("${mins}m")
+  # Only show seconds if uptime < 1 minute
+  if [[ ${#parts[@]} -eq 0 ]]; then
+    parts+=("${secs}s")
+  fi
+
+  echo "${parts[*]}"
+}
+
 # --- disk:format helpers ---
 
 # All supported boot architectures.

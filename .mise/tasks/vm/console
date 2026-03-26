@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+#MISE description="Attach to the QEMU monitor console of a running winnie VM"
+#USAGE flag "--vm <name>" help="VM identifier (from vm:list)"
+set -euo pipefail
+
+VM_NAME="${usage_vm:-}"
+
+WINNIE_RUN_DIR="${TMPDIR:-/tmp}/winnie"
+
+# --- resolve VM ---
+
+if [[ -z "$VM_NAME" ]]; then
+  shopt -s nullglob
+  socks=("$WINNIE_RUN_DIR"/*.sock)
+  shopt -u nullglob
+  live=()
+  for sock in "${socks[@]}"; do
+    [[ -S "$sock" ]] || continue
+    if printf '' | socat - "UNIX-CONNECT:$sock" >/dev/null 2>&1; then
+      live+=("$(basename "$sock" .sock)")
+    fi
+  done
+  if [[ ${#live[@]} -eq 0 ]]; then
+    echo "Error: no running VMs found." >&2
+    exit 1
+  elif [[ ${#live[@]} -gt 1 ]]; then
+    echo "Error: multiple VMs running. Specify one with --vm:" >&2
+    printf "  %s\n" "${live[@]}" >&2
+    exit 1
+  fi
+  VM_NAME="${live[0]}"
+fi
+
+VM_ID="$(basename "$VM_NAME")"
+VM_ID="${VM_ID%.img}"
+VM_ID="${VM_ID%.iso}"
+
+MONITOR_SOCK="$WINNIE_RUN_DIR/$VM_ID.sock"
+
+if [[ ! -S "$MONITOR_SOCK" ]]; then
+  echo "Error: no running VM found for $VM_ID" >&2
+  echo "Is it booted? Check: winnie vm:list" >&2
+  exit 1
+fi
+
+# Clean QEMU monitor readline noise from output.
+clean_monitor() {
+  tr -d '\r' \
+    | sed 's/\x1b\[[0-9;]*[a-zA-Z]//g; s/\x1b\[[0-9]*[A-Z]//g' \
+    | grep -v '^(qemu)' \
+    | grep -v '^QEMU' \
+    | grep -v '^$'
+}
+
+if [[ -t 0 ]]; then
+  # Interactive: TTY attached, use readline for a nice console experience
+  echo "Connecting to $VM_ID monitor console..."
+  echo "Type 'help' for commands, Ctrl-C to detach."
+  echo
+  exec socat - "UNIX-CONNECT:$MONITOR_SOCK"
+else
+  # Non-interactive: read commands from stdin, return clean output
+  while IFS= read -r cmd; do
+    printf '%s\n' "$cmd" \
+      | socat -t 1 - "UNIX-CONNECT:$MONITOR_SOCK" 2>/dev/null \
+      | clean_monitor
+  done
+fi
