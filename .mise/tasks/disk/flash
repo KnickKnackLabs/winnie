@@ -48,11 +48,35 @@ elif [[ "$OS" == "Linux" ]]; then
     exit 1
   fi
 
+  # Reject partitions — image flashing targets whole disks
+  dev_type=$(lsblk -ndo TYPE "$DEVICE" 2>/dev/null)
+  if [[ "$dev_type" == "part" ]]; then
+    parent=$(lsblk -ndo PKNAME "$DEVICE" 2>/dev/null)
+    echo "Error: $DEVICE is a partition, not a whole disk." >&2
+    echo "  Use /dev/$parent instead." >&2
+    exit 1
+  fi
+
   # Safety: refuse non-removable drives
   removable_path="/sys/block/$(basename "$DEVICE")/removable"
-  if [[ -f "$removable_path" && "$(cat "$removable_path")" != "1" ]]; then
+  if [[ ! -f "$removable_path" ]]; then
+    echo "Error: cannot determine if $DEVICE is removable (no sysfs entry)." >&2
+    exit 1
+  fi
+  if [[ "$(cat "$removable_path")" != "1" ]]; then
     echo "Error: $DEVICE does not appear to be removable." >&2
     exit 1
+  fi
+
+  # Safety: refuse to flash the root disk
+  root_dev=$(findmnt -n -o SOURCE / 2>/dev/null || true)
+  if [[ -n "$root_dev" ]]; then
+    root_disk=$(lsblk -ndo PKNAME "$root_dev" 2>/dev/null || true)
+    root_disk="${root_disk:-$(basename "$root_dev")}"
+    if [[ "$(basename "$DEVICE")" == "$root_disk" ]]; then
+      echo "Error: refusing to flash the root disk ($DEVICE)." >&2
+      exit 1
+    fi
   fi
 
   DEVICE_SIZE=$(lsblk -dn -o SIZE "$DEVICE" 2>/dev/null || echo "unknown")
