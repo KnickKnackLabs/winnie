@@ -1,15 +1,28 @@
 <div align="center">
 
+<pre>    ┌──────────┐
+    │ ▓▓▓▓▓▓▓▓ │
+    │ ▓ GRUB ▓ │
+    │ ▓▓▓▓▓▓▓▓ │
+    │  Alpine   │
+    │  Debian   │
+    │  Pop!_OS  │
+    └────┬┬────┘
+         ││
+    ─────┘└─────</pre>
+
 # winnie
 
-**Multiboot USB drives and QEMU VMs from [mise](https://mise.jdx.dev) tasks.**
+**One disk, many distros.**
 
 ![shell: bash](https://img.shields.io/badge/shell-bash-4EAA25?style=flat&logo=gnubash&logoColor=white)
 [![tasks: mise](https://img.shields.io/badge/tasks-mise-7c3aed?style=flat)](https://mise.jdx.dev)
 [![vm: QEMU](https://img.shields.io/badge/vm-QEMU-ff6600?style=flat&logo=qemu&logoColor=white)](https://www.qemu.org)
-[![tests: BATS](https://img.shields.io/badge/tests-BATS-blue?style=flat)](https://bats-core.readthedocs.io)
+[![tests: 134 passing](https://img.shields.io/badge/tests-134%20passing-blue?style=flat)](https://bats-core.readthedocs.io)
 
 </div>
+
+winnie builds multiboot USB drives and QEMU VMs from [mise](https://mise.jdx.dev) tasks. Download distros, format a drive, add as many as you want, boot it.
 
 ## Quick start
 
@@ -51,26 +64,23 @@ winnie disk:flash multiboot.img --device /dev/disk4
 ┌─────────────────────────────────┐
 │ CATALOG                         │
 │                                 │
-│ Query distro mirrors            │
 │ alpine · debian · mint · pop-os │
 └─────────────────────────────────┘
-        │ versions, URLs, checksums
+        │
         ▼
 ┌────────────────────────────┐
 │ ISO                        │
 │                            │
 │ get · add · list · extract │
-│ Download, verify, store    │
 └────────────────────────────┘
-        │ kernel, initrd, squashfs
+        │
         ▼
-┌──────────────────────────────────┐
-│ DISK                             │
-│                                  │
-│ format · add · flash · list      │
-│ Partition, GRUB, populate, write │
-└──────────────────────────────────┘
-        │ bootable device / image
+┌─────────────────────────────┐
+│ DISK                        │
+│                             │
+│ format · add · flash · list │
+└─────────────────────────────┘
+        │
         ▼
 ┌─────────────────────────────┐
 │ VM                          │
@@ -80,39 +90,45 @@ winnie disk:flash multiboot.img --device /dev/disk4
 └─────────────────────────────┘
 ```
 
-## Commands
+## Commands (22)
+
+Auto-discovered from `.mise/tasks/`. **This table updates when you add or rename tasks.**
 
 | Command | Description |
 | --- | --- |
-| `winnie catalog:alpine` | List available Alpine versions and variants |
-| `winnie catalog:debian` | List available Debian Live versions and variants |
-| `winnie catalog:mint` | List available Linux Mint versions and variants |
-| `winnie catalog:pop-os` | List available Pop!_OS versions and channels |
-| `winnie iso:get` | Download and verify an ISO from the catalog |
+| `winnie catalog:alpine` | Show available Alpine Linux versions and variants |
+| `winnie catalog:debian` | Show available Debian Live versions and variants |
+| `winnie catalog:mint` | Show available Linux Mint versions and variants |
+| `winnie catalog:pop-os` | Show available Pop!_OS versions and variants |
+| `winnie disk:add` | Copy an ISO file onto a winnie disk |
+| `winnie disk:flash` | Write a winnie disk image to a physical device |
+| `winnie disk:format` | Format a device or image as a winnie multiboot drive |
+| `winnie disk:inspect` | Inspect a winnie disk image (partitions, GRUB files, ISOs) |
+| `winnie disk:list` | List distros on a winnie disk |
+| `winnie grub:deploy` | Deploy latest grub.cfg to an existing disk image (fast iteration) |
 | `winnie iso:add` | Add a local ISO file to the store |
+| `winnie iso:extract` | Extract boot files from an ISO and write a manifest |
+| `winnie iso:get` | Download and verify an ISO from the catalog |
 | `winnie iso:list` | List ISOs in the local store |
-| `winnie iso:extract` | Extract boot files and generate a manifest |
-| `winnie disk:format` | Format a device or image as a multiboot drive |
-| `winnie disk:add` | Copy an ISO's boot files onto a winnie disk |
-| `winnie disk:flash` | Write a disk image to a physical USB device |
-| `winnie disk:list` | List distros installed on a winnie disk |
-| `winnie disk:inspect` | Inspect partitions, GRUB, and distros on an image |
-| `winnie grub:deploy` | Hot-reload grub.cfg onto an existing image |
-| `winnie vm:boot` | Boot a disk image or ISO in QEMU |
+| `winnie setup` | Install system dependencies not available via mise |
+| `winnie test` | Run all tests |
+| `winnie vm:boot` | Boot a winnie disk image in QEMU |
+| `winnie vm:console` | Attach to the QEMU monitor console of a running winnie VM |
+| `winnie vm:kill` | Stop a running winnie VM |
 | `winnie vm:list` | List running winnie VMs |
-| `winnie vm:console` | Attach to the QEMU monitor console |
-| `winnie vm:screenshot` | Capture a screenshot from a running VM |
-| `winnie vm:stats` | Report VM CPU, memory, and disk I/O |
-| `winnie vm:kill` | Gracefully stop a running VM |
+| `winnie vm:screenshot` | Capture a screenshot from a running winnie VM |
+| `winnie vm:stats` | Report resource usage for a running winnie VM |
 
-## Supported distros
+## Supported distros (4)
 
-| Distro | Catalog task | Architectures |
-| --- | --- | --- |
-| Alpine Linux | `catalog:alpine` | x86_64, aarch64 |
-| Debian | `catalog:debian` | amd64, arm64 |
-| Linux Mint | `catalog:mint` | x86_64 |
-| Pop!_OS | `catalog:pop-os` | amd64, arm64 |
+Auto-discovered from `.mise/tasks/catalog/`. Each file is a distro.
+
+| Distro | Catalog task |
+| --- | --- |
+| alpine | `catalog:alpine` |
+| debian | `catalog:debian` |
+| mint | `catalog:mint` |
+| pop-os | `catalog:pop-os` |
 
 Adding a distro means writing one catalog task that returns JSON (version, URL, checksum). The rest of the pipeline is generic.
 
@@ -182,4 +198,4 @@ Formatting a disk for a non-native architecture (e.g., x86_64 GRUB on an arm64 h
 mise run test
 ```
 
-BATS test suite covering architecture helpers, GRUB generation, ISO extraction, and disk format routing.
+134 tests across 10 BATS files — architecture helpers, GRUB generation, ISO extraction, disk format routing.

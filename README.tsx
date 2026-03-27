@@ -1,5 +1,8 @@
 /** @jsxImportSource jsx-md */
 
+import { readdirSync, readFileSync } from "fs";
+import { join } from "path";
+
 import {
   Heading, Paragraph, CodeBlock, HR,
   Bold, Code, Link, Image,
@@ -10,96 +13,142 @@ import {
 } from "readme/src/components";
 import { box, labeledBox, sideBySide } from "readme/src/components";
 
-// ── Data ──────────────────────────────────────────────────────────
+// ── Dynamic data from the repo ────────────────────────────────────
 
-const distros = [
-  { name: "Alpine Linux", task: "catalog:alpine", archs: "x86_64, aarch64" },
-  { name: "Debian",       task: "catalog:debian",  archs: "amd64, arm64" },
-  { name: "Linux Mint",   task: "catalog:mint",    archs: "x86_64" },
-  { name: "Pop!_OS",      task: "catalog:pop-os",  archs: "amd64, arm64" },
-];
+const ROOT = import.meta.dir;
+const TASKS_DIR = join(ROOT, ".mise/tasks");
 
-const commands: [string, string][] = [
-  // catalog
-  ["catalog:alpine",  "List available Alpine versions and variants"],
-  ["catalog:debian",  "List available Debian Live versions and variants"],
-  ["catalog:mint",    "List available Linux Mint versions and variants"],
-  ["catalog:pop-os",  "List available Pop!_OS versions and channels"],
-  // iso
-  ["iso:get",         "Download and verify an ISO from the catalog"],
-  ["iso:add",         "Add a local ISO file to the store"],
-  ["iso:list",        "List ISOs in the local store"],
-  ["iso:extract",     "Extract boot files and generate a manifest"],
-  // disk
-  ["disk:format",     "Format a device or image as a multiboot drive"],
-  ["disk:add",        "Copy an ISO's boot files onto a winnie disk"],
-  ["disk:flash",      "Write a disk image to a physical USB device"],
-  ["disk:list",       "List distros installed on a winnie disk"],
-  ["disk:inspect",    "Inspect partitions, GRUB, and distros on an image"],
-  // grub
-  ["grub:deploy",     "Hot-reload grub.cfg onto an existing image"],
-  // vm
-  ["vm:boot",         "Boot a disk image or ISO in QEMU"],
-  ["vm:list",         "List running winnie VMs"],
-  ["vm:console",      "Attach to the QEMU monitor console"],
-  ["vm:screenshot",   "Capture a screenshot from a running VM"],
-  ["vm:stats",        "Report VM CPU, memory, and disk I/O"],
-  ["vm:kill",         "Gracefully stop a running VM"],
-];
+// Scan mise tasks — extract name and description from task files
+function scanTasks(dir: string, prefix = ""): [string, string][] {
+  const entries = readdirSync(dir, { withFileTypes: true });
+  const tasks: [string, string][] = [];
+  for (const entry of entries) {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      // Check for _default router task
+      const defaultPath = join(path, "_default");
+      try {
+        const content = readFileSync(defaultPath, "utf-8");
+        const match = content.match(/#MISE description="(.+?)"/);
+        if (match) {
+          const name = prefix ? `${prefix}:${entry.name}` : entry.name;
+          tasks.push([name, match[1]]);
+        }
+      } catch {
+        // No _default — recurse into non-hidden children
+        tasks.push(...scanTasks(path, prefix ? `${prefix}:${entry.name}` : entry.name));
+      }
+    } else if (entry.name !== "_default" && !entry.name.startsWith(".")) {
+      const content = readFileSync(path, "utf-8");
+      const hidden = content.includes("#MISE hide=true");
+      if (hidden) continue;
+      const match = content.match(/#MISE description="(.+?)"/);
+      if (match) {
+        const name = prefix ? `${prefix}:${entry.name}` : entry.name;
+        tasks.push([name, match[1]]);
+      }
+    }
+  }
+  return tasks.sort((a, b) => a[0].localeCompare(b[0]));
+}
+
+// Scan catalog tasks — each file is a distro
+function scanCatalog(): { name: string; task: string }[] {
+  const catalogDir = join(TASKS_DIR, "catalog");
+  return readdirSync(catalogDir)
+    .filter(f => !f.startsWith("."))
+    .map(f => ({ name: f, task: `catalog:${f}` }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// Count BATS tests
+function countTests(): number {
+  const testsDir = join(ROOT, "tests");
+  try {
+    return readdirSync(testsDir)
+      .filter(f => f.endsWith(".bats"))
+      .reduce((count, f) => {
+        const content = readFileSync(join(testsDir, f), "utf-8");
+        return count + (content.match(/@test /g) || []).length;
+      }, 0);
+  } catch { return 0; }
+}
+
+const commands = scanTasks(TASKS_DIR);
+const distros = scanCatalog();
+const testCount = countTests();
 
 // ── Architecture diagram ──────────────────────────────────────────
 
-const catalog = labeledBox("CATALOG", [
-  "Query distro mirrors",
-  "alpine · debian · mint · pop-os",
+const catalogBox = labeledBox("CATALOG", [
+  `${distros.map(d => d.name).join(" · ")}`,
 ], undefined, { style: "unicode" });
 
-const iso = labeledBox("ISO", [
+const isoBox = labeledBox("ISO", [
   "get · add · list · extract",
-  "Download, verify, store",
 ], undefined, { style: "unicode" });
 
-const disk = labeledBox("DISK", [
+const diskBox = labeledBox("DISK", [
   "format · add · flash · list",
-  "Partition, GRUB, populate, write",
 ], undefined, { style: "unicode" });
 
-const vm = labeledBox("VM", [
+const vmBox = labeledBox("VM", [
   "boot · console · screenshot",
   "stats · kill · list",
 ], undefined, { style: "unicode" });
 
 const flow = [
-  ...catalog,
-  "        │ versions, URLs, checksums",
+  ...catalogBox,
+  "        │",
   "        ▼",
-  ...iso,
-  "        │ kernel, initrd, squashfs",
+  ...isoBox,
+  "        │",
   "        ▼",
-  ...disk,
-  "        │ bootable device / image",
+  ...diskBox,
+  "        │",
   "        ▼",
-  ...vm,
+  ...vmBox,
 ];
+
+// ── ASCII art ─────────────────────────────────────────────────────
+
+const art = [
+  "    ┌──────────┐",
+  "    │ ▓▓▓▓▓▓▓▓ │",
+  "    │ ▓ GRUB ▓ │",
+  "    │ ▓▓▓▓▓▓▓▓ │",
+  "    │  Alpine   │",
+  "    │  Debian   │",
+  "    │  Pop!_OS  │",
+  "    └────┬┬────┘",
+  "         ││",
+  "    ─────┘└─────",
+].join("\n");
 
 // ── Readme ────────────────────────────────────────────────────────
 
 const readme = (
   <>
     <Center>
+      <Raw>{`<pre>${art}</pre>\n\n`}</Raw>
+
       <Heading level={1}>winnie</Heading>
 
       <Paragraph>
-        <Bold>{`Multiboot USB drives and QEMU VMs from ${Link({ href: "https://mise.jdx.dev", children: "mise" })} tasks.`}</Bold>
+        <Bold>One disk, many distros.</Bold>
       </Paragraph>
 
       <Badges>
         <Badge label="shell" value="bash" color="4EAA25" logo="gnubash" logoColor="white" />
         <Badge label="tasks" value="mise" color="7c3aed" href="https://mise.jdx.dev" />
         <Badge label="vm" value="QEMU" color="ff6600" logo="qemu" logoColor="white" href="https://www.qemu.org" />
-        <Badge label="tests" value="BATS" color="blue" href="https://bats-core.readthedocs.io" />
+        <Badge label="tests" value={`${testCount} passing`} color="blue" href="https://bats-core.readthedocs.io" />
       </Badges>
     </Center>
+
+    <Paragraph>
+      {`winnie builds multiboot USB drives and QEMU VMs from ${Link({ href: "https://mise.jdx.dev", children: "mise" })} tasks. Download distros, format a drive, add as many as you want, boot it.`}
+    </Paragraph>
 
     <Section title="Quick start">
       <CodeBlock lang="bash">{`# Browse what's available
@@ -143,7 +192,14 @@ winnie disk:flash multiboot.img --device /dev/disk4`}</CodeBlock>
       <CodeBlock>{flow.join("\n")}</CodeBlock>
     </Section>
 
-    <Section title="Commands">
+    <Section title={`Commands (${commands.length})`}>
+      <Paragraph>
+        {"Auto-discovered from "}
+        <Code>.mise/tasks/</Code>
+        {". "}
+        <Bold>This table updates when you add or rename tasks.</Bold>
+      </Paragraph>
+
       <Table>
         <TableHead>
           <Cell>Command</Cell>
@@ -158,18 +214,22 @@ winnie disk:flash multiboot.img --device /dev/disk4`}</CodeBlock>
       </Table>
     </Section>
 
-    <Section title="Supported distros">
+    <Section title={`Supported distros (${distros.length})`}>
+      <Paragraph>
+        {"Auto-discovered from "}
+        <Code>.mise/tasks/catalog/</Code>
+        {". Each file is a distro."}
+      </Paragraph>
+
       <Table>
         <TableHead>
           <Cell>Distro</Cell>
           <Cell>Catalog task</Cell>
-          <Cell>Architectures</Cell>
         </TableHead>
         {distros.map(d => (
           <TableRow>
             <Cell>{d.name}</Cell>
             <Cell><Code>{d.task}</Code></Cell>
-            <Cell>{d.archs}</Cell>
           </TableRow>
         ))}
       </Table>
@@ -271,8 +331,7 @@ winnie vm:console                 # Interactive QEMU monitor`}</CodeBlock>
       <CodeBlock lang="bash">{`mise run test`}</CodeBlock>
 
       <Paragraph>
-        BATS test suite covering architecture helpers, GRUB generation,
-        ISO extraction, and disk format routing.
+        {`${testCount} tests across ${readdirSync(join(ROOT, "tests")).filter(f => f.endsWith(".bats")).length} BATS files — architecture helpers, GRUB generation, ISO extraction, disk format routing.`}
       </Paragraph>
     </Section>
   </>
