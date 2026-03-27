@@ -4,14 +4,14 @@ import { readdirSync, readFileSync } from "fs";
 import { join } from "path";
 
 import {
-  Heading, Paragraph, CodeBlock, HR,
-  Bold, Code, Link, Image,
+  Heading, Paragraph, CodeBlock,
+  Bold, Code, Link,
   Badge, Badges, Center, Details, Section, Alert,
   Table, TableHead, TableRow, Cell,
   List, Item,
   Raw,
 } from "readme/src/components";
-import { box, labeledBox, sideBySide } from "readme/src/components";
+import { labeledBox } from "readme/src/components";
 
 // ── Dynamic data from the repo ────────────────────────────────────
 
