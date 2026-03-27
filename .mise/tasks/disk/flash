@@ -1,0 +1,143 @@
+#!/usr/bin/env bash
+#MISE description="Write a winnie disk image to a physical device"
+#USAGE arg "<image>" help="Path to disk image"
+#USAGE flag "-d --device <device>" help="Block device (e.g., /dev/disk4)" required
+#USAGE flag "-y --yes" help="Skip confirmation prompt"
+set -euo pipefail
+
+IMAGE="${usage_image}"
+DEVICE="${usage_device}"
+SKIP_CONFIRM="${usage_yes:-false}"
+
+# ── Validate inputs ─────────────────────────────────────────────
+
+if [[ ! -f "$IMAGE" ]]; then
+  echo "Error: $IMAGE does not exist." >&2
+  exit 1
+fi
+
+IMAGE_SIZE=$(stat -f%z "$IMAGE" 2>/dev/null || stat -c%s "$IMAGE" 2>/dev/null)
+IMAGE_MB=$(( IMAGE_SIZE / 1048576 ))
+
+# ── Platform-specific device checks ─────────────────────────────
+
+OS="$(uname)"
+
+if [[ "$OS" == "Darwin" ]]; then
+  # macOS: use diskutil for device info
+  if ! diskutil info "$DEVICE" &>/dev/null; then
+    echo "Error: $DEVICE is not a valid disk." >&2
+    exit 1
+  fi
+
+  # Safety: refuse to flash the boot disk
+  BOOT_DISK=$(diskutil info / | awk '/Part of Whole:/ {print $NF}')
+  if [[ "$DEVICE" == "/dev/$BOOT_DISK" || "$DEVICE" == "/dev/r$BOOT_DISK" ]]; then
+    echo "Error: refusing to flash the boot disk ($DEVICE)." >&2
+    exit 1
+  fi
+
+  DEVICE_SIZE=$(diskutil info "$DEVICE" | awk '/Disk Size:/ {print $3 " " $4}')
+  DEVICE_NAME=$(diskutil info "$DEVICE" | awk -F: '/Media Name:/ {gsub(/^[ \t]+/, "", $2); print $2}')
+  # Use raw device for faster writes
+  RAW_DEVICE="/dev/r$(basename "$DEVICE")"
+
+elif [[ "$OS" == "Linux" ]]; then
+  if [[ ! -b "$DEVICE" ]]; then
+    echo "Error: $DEVICE is not a block device." >&2
+    exit 1
+  fi
+
+  # Reject partitions — image flashing targets whole disks
+  dev_type=$(lsblk -ndo TYPE "$DEVICE" 2>/dev/null)
+  if [[ "$dev_type" == "part" ]]; then
+    parent=$(lsblk -ndo PKNAME "$DEVICE" 2>/dev/null)
+    echo "Error: $DEVICE is a partition, not a whole disk." >&2
+    echo "  Use /dev/$parent instead." >&2
+    exit 1
+  fi
+
+  # Safety: refuse non-removable drives
+  removable_path="/sys/block/$(basename "$DEVICE")/removable"
+  if [[ ! -f "$removable_path" ]]; then
+    echo "Error: cannot determine if $DEVICE is removable (no sysfs entry)." >&2
+    exit 1
+  fi
+  if [[ "$(cat "$removable_path")" != "1" ]]; then
+    echo "Error: $DEVICE does not appear to be removable." >&2
+    exit 1
+  fi
+
+  # Safety: refuse to flash the root disk
+  root_dev=$(findmnt -n -o SOURCE / 2>/dev/null || true)
+  if [[ -n "$root_dev" ]]; then
+    root_disk=$(lsblk -ndo PKNAME "$root_dev" 2>/dev/null || true)
+    root_disk="${root_disk:-$(basename "$root_dev")}"
+    if [[ "$(basename "$DEVICE")" == "$root_disk" ]]; then
+      echo "Error: refusing to flash the root disk ($DEVICE)." >&2
+      exit 1
+    fi
+  fi
+
+  DEVICE_SIZE=$(lsblk -dn -o SIZE "$DEVICE" 2>/dev/null || echo "unknown")
+  DEVICE_NAME=$(lsblk -dn -o MODEL "$DEVICE" 2>/dev/null || echo "unknown")
+  RAW_DEVICE="$DEVICE"
+
+else
+  echo "Error: unsupported platform ($OS)." >&2
+  exit 1
+fi
+
+# ── Confirmation ─────────────────────────────────────────────────
+
+echo "winnie: flash"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+echo "  Image:   $(basename "$IMAGE") (${IMAGE_MB}MB)"
+echo "  Device:  $DEVICE ($DEVICE_SIZE)"
+echo "  Name:    ${DEVICE_NAME:-unknown}"
+echo ""
+echo "  This will OVERWRITE all data on $DEVICE."
+echo ""
+
+if [[ "$SKIP_CONFIRM" != "true" ]]; then
+  if command -v gum &>/dev/null; then
+    gum confirm "Proceed with flashing $DEVICE?" || exit 1
+  else
+    read -rp "Type YES to confirm: " confirm
+    if [[ "$confirm" != "YES" ]]; then
+      echo "Aborted."
+      exit 1
+    fi
+  fi
+fi
+
+# ── Unmount ──────────────────────────────────────────────────────
+
+echo "Unmounting $DEVICE..."
+if [[ "$OS" == "Darwin" ]]; then
+  diskutil unmountDisk "$DEVICE"
+else
+  for part in "${DEVICE}"*; do
+    if mount | grep -q "^$part "; then
+      umount "$part" 2>/dev/null || true
+    fi
+  done
+fi
+
+# ── Flash ────────────────────────────────────────────────────────
+
+echo "Writing $(basename "$IMAGE") → $RAW_DEVICE ..."
+if [[ "$OS" == "Darwin" ]]; then
+  sudo dd if="$IMAGE" of="$RAW_DEVICE" bs=4m status=progress 2>&1
+else
+  sudo dd if="$IMAGE" of="$RAW_DEVICE" bs=4M status=progress 2>&1
+fi
+
+sync
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "Done! $DEVICE is ready."
+echo ""
+echo "Test with QEMU:"
+echo "  winnie vm:boot --device $DEVICE --uefi"
