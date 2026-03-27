@@ -90,12 +90,7 @@ const readme = (
       <Heading level={1}>winnie</Heading>
 
       <Paragraph>
-        <Bold>Multiboot USB drives and VMs from composable tasks.</Bold>
-      </Paragraph>
-
-      <Paragraph>
-        Download distros. Build bootable drives. Test in QEMU.{"\n"}
-        Like {Link({ href: "https://ventoy.net", children: "Ventoy" })}, but built from {Link({ href: "https://mise.jdx.dev", children: "mise" })} tasks you can read, modify, and extend.
+        <Bold>{`Multiboot USB drives and QEMU VMs from ${Link({ href: "https://mise.jdx.dev", children: "mise" })} tasks.`}</Bold>
       </Paragraph>
 
       <Badges>
@@ -145,11 +140,6 @@ winnie disk:flash multiboot.img --device /dev/disk4`}</CodeBlock>
     </Section>
 
     <Section title="Architecture">
-      <Paragraph>
-        Four subsystems, each a group of mise tasks. Data flows down — catalog
-        feeds ISO management, which feeds disk building, which feeds VM testing.
-      </Paragraph>
-
       <CodeBlock>{flow.join("\n")}</CodeBlock>
     </Section>
 
@@ -185,16 +175,12 @@ winnie disk:flash multiboot.img --device /dev/disk4`}</CodeBlock>
       </Table>
 
       <Paragraph>
-        Adding a new distro means writing a catalog task that returns JSON
-        (version, URL, checksum) — the rest of the pipeline is generic.
+        Adding a distro means writing one catalog task that returns JSON
+        (version, URL, checksum). The rest of the pipeline is generic.
       </Paragraph>
     </Section>
 
     <Section title="VM management">
-      <Paragraph>
-        winnie wraps QEMU with automatic acceleration and cross-architecture support.
-      </Paragraph>
-
       <CodeBlock lang="bash">{`# Boot with hardware acceleration (hvf on macOS, kvm on Linux)
 winnie vm:boot --image disk.img --uefi
 
@@ -267,24 +253,18 @@ winnie vm:console                 # Interactive QEMU monitor`}</CodeBlock>
       <Details summary="Cross-architecture GRUB">
         <Paragraph>
           Formatting a disk for a non-native architecture (e.g., x86_64 GRUB
-          on an arm64 host) is handled by extracting GRUB modules from
-          Debian .deb packages inside a Docker container. No cross-compilation
-          required — the modules are pre-built, winnie just needs to place them.
+          on an arm64 host) works by extracting pre-built GRUB modules from
+          Debian .deb packages inside a Docker container.
         </Paragraph>
       </Details>
     </Section>
 
     <Section title="Requirements">
       <List>
-        <Item>{Link({ href: "https://mise.jdx.dev", children: "mise" })} — task runner (installs all other tools automatically)</Item>
-        <Item>{Link({ href: "https://www.docker.com", children: "Docker" })} — used for disk formatting (partitioning, ext4, GRUB install)</Item>
-        <Item>{Link({ href: "https://www.qemu.org", children: "QEMU" })} — VM tasks (<Code>brew install qemu</Code> / <Code>apt install qemu-system</Code>)</Item>
+        <Item>{Link({ href: "https://mise.jdx.dev", children: "mise" })} — task runner, manages all other tool dependencies</Item>
+        <Item>{Link({ href: "https://www.docker.com", children: "Docker" })} — disk formatting (partitioning, ext4, GRUB)</Item>
+        <Item>{Link({ href: "https://www.qemu.org", children: "QEMU" })} — VM tasks</Item>
       </List>
-
-      <Paragraph>
-        All other dependencies (bats, gum, jq, 7zip, etc.) are managed by mise
-        and installed on first run.
-      </Paragraph>
     </Section>
 
     <Section title="Testing">

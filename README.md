@@ -2,10 +2,7 @@
 
 # winnie
 
-**Multiboot USB drives and VMs from composable tasks.**
-
-Download distros. Build bootable drives. Test in QEMU.
-Like [Ventoy](https://ventoy.net), but built from [mise](https://mise.jdx.dev) tasks you can read, modify, and extend.
+**Multiboot USB drives and QEMU VMs from [mise](https://mise.jdx.dev) tasks.**
 
 ![shell: bash](https://img.shields.io/badge/shell-bash-4EAA25?style=flat&logo=gnubash&logoColor=white)
 [![tasks: mise](https://img.shields.io/badge/tasks-mise-7c3aed?style=flat)](https://mise.jdx.dev)
@@ -49,8 +46,6 @@ winnie disk:flash multiboot.img --device /dev/disk4
 > On macOS, `disk:flash` uses the raw device (`/dev/rdisk*`) for faster writes and refuses to flash the boot disk.
 
 ## Architecture
-
-Four subsystems, each a group of mise tasks. Data flows down — catalog feeds ISO management, which feeds disk building, which feeds VM testing.
 
 ```
 ┌─────────────────────────────────┐
@@ -119,11 +114,9 @@ Four subsystems, each a group of mise tasks. Data flows down — catalog feeds I
 | Linux Mint | `catalog:mint` | x86_64 |
 | Pop!_OS | `catalog:pop-os` | amd64, arm64 |
 
-Adding a new distro means writing a catalog task that returns JSON (version, URL, checksum) — the rest of the pipeline is generic.
+Adding a distro means writing one catalog task that returns JSON (version, URL, checksum). The rest of the pipeline is generic.
 
 ## VM management
-
-winnie wraps QEMU with automatic acceleration and cross-architecture support.
 
 ```bash
 # Boot with hardware acceleration (hvf on macOS, kvm on Linux)
@@ -173,17 +166,15 @@ Both BIOS and UEFI boot are supported. GRUB modules are installed for each targe
 <details>
 <summary><b>Cross-architecture GRUB</b></summary>
 
-Formatting a disk for a non-native architecture (e.g., x86_64 GRUB on an arm64 host) is handled by extracting GRUB modules from Debian .deb packages inside a Docker container. No cross-compilation required — the modules are pre-built, winnie just needs to place them.
+Formatting a disk for a non-native architecture (e.g., x86_64 GRUB on an arm64 host) works by extracting pre-built GRUB modules from Debian .deb packages inside a Docker container.
 
 </details>
 
 ## Requirements
 
-- [mise](https://mise.jdx.dev) — task runner (installs all other tools automatically)
-- [Docker](https://www.docker.com) — used for disk formatting (partitioning, ext4, GRUB install)
-- [QEMU](https://www.qemu.org) — VM tasks (`brew install qemu` / `apt install qemu-system`)
-
-All other dependencies (bats, gum, jq, 7zip, etc.) are managed by mise and installed on first run.
+- [mise](https://mise.jdx.dev) — task runner, manages all other tool dependencies
+- [Docker](https://www.docker.com) — disk formatting (partitioning, ext4, GRUB)
+- [QEMU](https://www.qemu.org) — VM tasks
 
 ## Testing
 
