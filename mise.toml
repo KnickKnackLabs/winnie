@@ -3,9 +3,9 @@ quiet = true
 
 [tools]
 bats = "1.13.0"
-usage = "latest"
-gum = "latest"
-jq = "latest"
-yq = "latest"
-coreutils = "latest"
+usage = "3.0.0"
+gum = "0.17.0"
+jq = "1.8.1"
+yq = "4.50.1"
+coreutils = "0.7.0"
 "github:ip7z/7zip" = "26.00"
