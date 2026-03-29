@@ -192,9 +192,10 @@ BS="4m"
 [[ "$OS" == "Linux" ]] && BS="4M"
 
 if [[ "$DUMP_MODE" == "compact" ]]; then
-  # Use bs=512 with count for precise byte boundary
-  DUMP_BLOCKS=$((DUMP_BYTES / 512))
-  sudo dd if="$RAW_DEVICE" of="$IMAGE" bs=512 count="$DUMP_BLOCKS" status=progress 2>&1
+  # Round up to nearest 4MB block — overshoot is harmless free space
+  BS_BYTES=4194304
+  DUMP_BLOCKS=$(( (DUMP_BYTES + BS_BYTES - 1) / BS_BYTES ))
+  sudo dd if="$RAW_DEVICE" of="$IMAGE" bs="$BS" count="$DUMP_BLOCKS" status=progress 2>&1
 else
   sudo dd if="$RAW_DEVICE" of="$IMAGE" bs="$BS" status=progress 2>&1
 fi
