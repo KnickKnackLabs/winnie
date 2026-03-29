@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 
-# Tests for vm:stats helpers: human_bytes, human_uptime
+# Tests for formatting helpers and confirm_or_exit
 
 load test_helper
 
@@ -95,4 +95,18 @@ setup() {
 @test "human_uptime: leading whitespace stripped" {
   run human_uptime "   05:30"
   [ "$output" = "5m" ]
+}
+
+# --- confirm_or_exit ---
+
+@test "confirm_or_exit: skipped when SKIP_CONFIRM=true" {
+  run bash -c 'source "$MISE_CONFIG_ROOT/lib/common.sh"; SKIP_CONFIRM=true confirm_or_exit "Do it?"'
+  [ "$status" -eq 0 ]
+}
+
+@test "confirm_or_exit: fails with message when no TTY and no --yes" {
+  run bash -c 'source "$MISE_CONFIG_ROOT/lib/common.sh"; SKIP_CONFIRM=false confirm_or_exit "Do it?" < /dev/null'
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"no TTY available"* ]]
+  [[ "$output" == *"--yes"* ]]
 }

@@ -100,17 +100,7 @@ echo ""
 echo "  This will OVERWRITE all data on $DEVICE."
 echo ""
 
-if [[ "$SKIP_CONFIRM" != "true" ]]; then
-  if command -v gum &>/dev/null; then
-    gum confirm "Proceed with flashing $DEVICE?" || exit 1
-  else
-    read -rp "Type YES to confirm: " confirm
-    if [[ "$confirm" != "YES" ]]; then
-      echo "Aborted."
-      exit 1
-    fi
-  fi
-fi
+SKIP_CONFIRM="$SKIP_CONFIRM" confirm_or_exit "Proceed with flashing $DEVICE?"
 
 # ── Unmount ──────────────────────────────────────────────────────
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-#MISE description="Inspect a winnie disk image (partitions, GRUB files, ISOs)"
-#USAGE flag "-i --image <path>" help="Disk image path" default="disk.img"
+#MISE description="Inspect a winnie disk image via Docker (deep inspection)"
+#MISE hide=true
+#USAGE flag "-i --image <path>" help="Disk image path" required
 set -euo pipefail
 
 IMAGE="${usage_image}"

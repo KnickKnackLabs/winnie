@@ -235,6 +235,35 @@ human_uptime() {
   echo "${out[*]}"
 }
 
+# --- confirmation helpers ---
+
+# Prompt the user for confirmation. Exits 1 if declined or no TTY.
+# Usage: confirm_or_exit "Proceed with dangerous thing?"
+# Respects SKIP_CONFIRM (set from --yes flag).
+confirm_or_exit() {
+  local prompt="${1:-Continue?}"
+
+  if [[ "${SKIP_CONFIRM:-false}" == "true" ]]; then
+    return 0
+  fi
+
+  if [[ ! -t 0 ]]; then
+    echo "Error: confirmation required but no TTY available." >&2
+    echo "  Use --yes to skip confirmation in non-interactive mode." >&2
+    exit 1
+  fi
+
+  if command -v gum &>/dev/null; then
+    gum confirm "$prompt" || exit 1
+  else
+    read -rp "Type YES to confirm: " confirm
+    if [[ "$confirm" != "YES" ]]; then
+      echo "Aborted."
+      exit 1
+    fi
+  fi
+}
+
 # --- disk:format helpers ---
 
 # All supported boot architectures.

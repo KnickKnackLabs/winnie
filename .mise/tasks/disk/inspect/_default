@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+#MISE description="Inspect a winnie disk image (partitions, GRUB files, ISOs)"
+#USAGE flag "-d --device <device>" help="Block device (e.g., /dev/disk4)"
+#USAGE flag "-i --image <path>" help="Disk image path"
+#USAGE flag "--deep" help="Also dump and inspect data partitions (slow)"
+set -euo pipefail
+
+DEVICE="${usage_device:-}"
+IMAGE="${usage_image:-}"
+
+if [[ -n "$DEVICE" && -n "$IMAGE" ]]; then
+  echo "Error: specify --device or --image, not both." >&2
+  exit 1
+fi
+
+if [[ -z "$DEVICE" && -z "$IMAGE" ]]; then
+  echo "Usage: disk:inspect --device <device> or --image <path>" >&2
+  echo "" >&2
+  echo "  --device /dev/disk4     Inspect a physical device (native, no Docker)" >&2
+  echo "  --image disk.img        Deep inspect a disk image (requires Docker)" >&2
+  exit 1
+fi
+
+if [[ -n "$DEVICE" ]]; then
+  ARGS=(--device "$DEVICE")
+  [[ "${usage_deep:-false}" == "true" ]] && ARGS+=(--deep)
+  mise run -q disk:inspect:device -- "${ARGS[@]}"
+else
+  mise run -q disk:inspect:image -- --image "$IMAGE"
+fi

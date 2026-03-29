@@ -1,0 +1,210 @@
+#!/usr/bin/env bash
+#MISE description="Inspect a physical device using native OS tools"
+#MISE hide=true
+#USAGE flag "-d --device <device>" help="Block device (e.g., /dev/disk4)" required
+#USAGE flag "--deep" help="Also dump and inspect data partitions (slow)"
+set -euo pipefail
+
+source "$MISE_CONFIG_ROOT/lib/common.sh"
+
+DEVICE="${usage_device:-}"
+
+if [[ -z "$DEVICE" ]]; then
+  echo "Error: --device is required." >&2
+  exit 1
+fi
+
+OS="$(uname)"
+
+# Prompt for sudo upfront so password doesn't interrupt output
+if [[ "$OS" == "Darwin" ]]; then
+  sudo -v 2>/dev/null || true
+fi
+
+# ── macOS ────────────────────────────────────────────────────────
+
+if [[ "$OS" == "Darwin" ]]; then
+  if ! diskutil info "$DEVICE" &>/dev/null; then
+    echo "Error: $DEVICE is not a valid disk." >&2
+    exit 1
+  fi
+
+  # Get device info
+  DEVICE_NAME=$(diskutil info "$DEVICE" | awk -F: '/Media Name:/ {gsub(/^[ \t]+/, "", $2); print $2}')
+  DEVICE_SIZE=$(diskutil info "$DEVICE" | awk '/Disk Size:/ {print $3 " " $4}')
+  DEVICE_SCHEME=$(diskutil info "$DEVICE" | awk -F: '/Content \(IOContent\):/ {gsub(/^[ \t]+/, "", $2); print $2}')
+  IS_WHOLE=$(diskutil info "$DEVICE" | awk '/^   Whole:/ {print $NF}')
+  PROTOCOL=$(diskutil info "$DEVICE" | awk -F: '/Protocol:/ {gsub(/^[ \t]+/, "", $2); print $2}')
+  REMOVABLE=$(diskutil info "$DEVICE" | awk -F: '/Removable Media:/ {gsub(/^[ \t]+/, "", $2); print $2}')
+
+  echo "winnie: inspect device"
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo ""
+  echo "  Device:     $DEVICE"
+  echo "  Name:       ${DEVICE_NAME:-unknown}"
+  echo "  Size:       ${DEVICE_SIZE:-unknown}"
+  echo "  Scheme:     ${DEVICE_SCHEME:-unknown}"
+  echo "  Protocol:   ${PROTOCOL:-unknown}"
+  echo "  Removable:  ${REMOVABLE:-unknown}"
+
+  # If this is a partition, show partition-specific info and stop
+  if [[ "$IS_WHOLE" != "Yes" ]]; then
+    PART_TYPE=$(diskutil info "$DEVICE" | awk -F: '/Partition Type:/ {gsub(/^[ \t]+/, "", $2); print $2}')
+    FS_TYPE=$(diskutil info "$DEVICE" | awk -F: '/Type \(Bundle\):/ {gsub(/^[ \t]+/, "", $2); print $2}')
+    FS_NAME=$(diskutil info "$DEVICE" | awk -F: '/File System Personality:/ {gsub(/^[ \t]+/, "", $2); print $2}')
+    VOL_NAME=$(diskutil info "$DEVICE" | awk -F: '/Volume Name:/ {gsub(/^[ \t]+/, "", $2); print $2}')
+    echo "  Partition:  ${PART_TYPE:-unknown}"
+    echo "  Filesystem: ${FS_NAME:-${FS_TYPE:-unknown}}"
+    echo "  Label:      ${VOL_NAME:-none}"
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    exit 0
+  fi
+
+  # ── Partition table ──────────────────────────────────────────
+
+  echo ""
+  echo "== Partitions =="
+  # Parse diskutil list output
+  diskutil list "$DEVICE" | tail -n +2
+
+  # ── Per-partition inspection ─────────────────────────────────
+
+  # Collect partition device IDs
+  PARTITIONS=()
+  while IFS= read -r part; do
+    [[ -n "$part" ]] && PARTITIONS+=("$part")
+  done < <(diskutil list "$DEVICE" | awk '/^ *[1-9][0-9]*:/ {print $NF}')
+
+  EFI_CHECKED=false
+
+  for PART_ID in "${PARTITIONS[@]}"; do
+    PART_DEV="/dev/$PART_ID"
+    PART_TYPE=$(diskutil info "$PART_DEV" | awk -F: '/Partition Type:/ {gsub(/^[ \t]+/, "", $2); print $2}')
+    PART_SIZE=$(diskutil info "$PART_DEV" | awk '/Disk Size:/ {print $3 " " $4}')
+    FS_PERSONALITY=$(diskutil info "$PART_DEV" | awk -F: '/File System Personality:/ {gsub(/^[ \t]+/, "", $2); print $2}')
+    VOL_NAME=$(diskutil info "$PART_DEV" | awk -F: '/Volume Name:/ {gsub(/^[ \t]+/, "", $2); print $2}')
+
+    # ── EFI partition: mount and check bootloader ────────────
+    if [[ "$PART_TYPE" == "EFI" || "$PART_TYPE" == "EFI System Partition" ]]; then
+      EFI_CHECKED=true
+      echo ""
+      echo "== EFI Partition ($PART_ID, $PART_SIZE) =="
+
+      EFI_MOUNT="$(mktemp -d)"
+      if sudo diskutil mount -mountPoint "$EFI_MOUNT" "$PART_DEV" &>/dev/null; then
+        echo "  Contents:"
+        find "$EFI_MOUNT" -type f | sed "s|^$EFI_MOUNT|  |"
+
+        # Check for standard bootloader
+        if [[ -f "$EFI_MOUNT/EFI/BOOT/BOOTX64.EFI" ]]; then
+          EFI_FILE="$EFI_MOUNT/EFI/BOOT/BOOTX64.EFI"
+          EFI_SIZE_BYTES=$(stat -f%z "$EFI_FILE" 2>/dev/null)
+          echo ""
+          echo "  BOOTX64.EFI: present ($(human_bytes "$EFI_SIZE_BYTES"))"
+
+          # Check if it's GRUB
+          if strings "$EFI_FILE" | grep -q "Welcome to GRUB"; then
+            echo "  Type: GRUB"
+            # Check embedded modules
+            MODS=""
+            for mod in search normal ext2 fat part_gpt configfile linux; do
+              if strings "$EFI_FILE" | grep -q "^${mod}$"; then
+                MODS="${MODS:+$MODS, }$mod"
+              fi
+            done
+            [[ -n "$MODS" ]] && echo "  Embedded modules: $MODS"
+          fi
+
+          # Check for grub.cfg on EFI partition
+          if [[ -f "$EFI_MOUNT/EFI/BOOT/grub.cfg" ]]; then
+            echo "  grub.cfg: present (on EFI partition)"
+          elif [[ -f "$EFI_MOUNT/boot/grub/grub.cfg" ]]; then
+            echo "  grub.cfg: present (on EFI partition)"
+          fi
+        else
+          echo ""
+          echo "  ⚠ BOOTX64.EFI: MISSING"
+        fi
+
+        # Check for AARCH64 bootloader
+        if [[ -f "$EFI_MOUNT/EFI/BOOT/BOOTAA64.EFI" ]]; then
+          echo "  BOOTAA64.EFI: present (aarch64)"
+        fi
+
+        sudo diskutil unmount "$PART_DEV" &>/dev/null || true
+      else
+        echo "  (could not mount)"
+      fi
+      rmdir "$EFI_MOUNT" 2>/dev/null || true
+    fi
+
+    # ── Linux / data partition: note it ───────────────────────
+    if [[ "$PART_TYPE" == "Linux Filesystem" || "$PART_TYPE" == "Microsoft Basic Data" ]]; then
+      # macOS doesn't recognize ext4, so volume name is useless
+      LABEL_DISPLAY="$VOL_NAME"
+      [[ "$LABEL_DISPLAY" == *"Not applicable"* ]] && LABEL_DISPLAY="(ext4 — not readable on macOS)"
+
+      echo ""
+      echo "== Data Partition ($PART_ID, $PART_SIZE) =="
+      echo "  Type:  $PART_TYPE"
+      echo "  Label: $LABEL_DISPLAY"
+
+      if [[ "${usage_deep:-false}" != "true" ]]; then
+        echo ""
+        echo "  To inspect contents (GRUB config, distros, modules):"
+        echo "    winnie disk:inspect --device $DEVICE --deep"
+      fi
+    fi
+  done
+
+  # ── Deep inspection: compact dump → delegate to disk:inspect --image ──
+
+  if [[ "${usage_deep:-false}" == "true" ]]; then
+    echo ""
+    echo "== Deep Inspection =="
+    DEEP_DUMP="${TMPDIR:-/tmp}/winnie-inspect-$$.img"
+    trap "rm -f '$DEEP_DUMP'" EXIT
+
+    echo "  Creating compact disk image..."
+    mise run -q disk:dump -- --device "$DEVICE" --image "$DEEP_DUMP" --yes
+    echo ""
+    mise run -q disk:inspect:image -- --image "$DEEP_DUMP"
+    rm -f "$DEEP_DUMP"
+  fi
+
+  # ── Summary ────────────────────────────────────────────────
+
+  echo ""
+  echo "To dump a specific partition for offline inspection:"
+  for DUMP_ID in "${PARTITIONS[@]}"; do
+    echo "  winnie disk:dump --device /dev/$DUMP_ID --image $DUMP_ID.img"
+  done
+  echo ""
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# ── Linux ────────────────────────────────────────────────────────
+
+elif [[ "$OS" == "Linux" ]]; then
+  if [[ ! -b "$DEVICE" ]]; then
+    echo "Error: $DEVICE is not a block device." >&2
+    exit 1
+  fi
+
+  echo "winnie: inspect device"
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo ""
+  echo "  Device:  $DEVICE"
+  echo ""
+  echo "== Partitions =="
+  lsblk -o NAME,SIZE,TYPE,FSTYPE,LABEL,MOUNTPOINT "$DEVICE"
+  echo ""
+  echo "== Filesystem Details =="
+  blkid "${DEVICE}"* 2>/dev/null || true
+  echo ""
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+else
+  echo "Error: unsupported platform ($OS)." >&2
+  exit 1
+fi
