@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+#MISE description="Type a string into a running winnie VM"
+#USAGE flag "--vm <name>" help="VM identifier (from vm:list)"
+#USAGE flag "-d --delay <ms>" help="Delay between keystrokes in milliseconds" default="50"
+#USAGE arg "<text>" help="Text to type"
+set -euo pipefail
+
+source "$MISE_CONFIG_ROOT/lib/common.sh"
+
+resolve_vm "${usage_vm:-}"
+
+DELAY="${usage_delay:-50}"
+TEXT="${usage_text}"
+
+# Type each character
+for (( i=0; i<${#TEXT}; i++ )); do
+  c="${TEXT:$i:1}"
+  key=$(char_to_key "$c") || continue
+  monitor_cmd "sendkey $key $DELAY" >/dev/null
+  # Small inter-key delay to avoid dropped keys
+  sleep 0.05
+done

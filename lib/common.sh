@@ -172,12 +172,15 @@ resolve_vm_pid() {
 # Usage: monitor_cmd <command>
 # Requires: MONITOR_SOCK to be set (via resolve_vm).
 monitor_cmd() {
-  printf '%s\n' "$1" | socat -t 1 - "UNIX-CONNECT:$MONITOR_SOCK" 2>/dev/null \
+  local raw
+  raw=$(printf '%s\n' "$1" | socat -t 1 - "UNIX-CONNECT:$MONITOR_SOCK" 2>/dev/null) || return 1
+  printf '%s\n' "$raw" \
     | tr -d '\r' \
     | sed 's/\x1b\[[0-9;]*[a-zA-Z]//g; s/\x1b\[[0-9]*[A-Z]//g' \
     | grep -v '^(qemu)' \
     | grep -v '^QEMU' \
-    | grep -v '^$'
+    | grep -v '^$' \
+    || true
 }
 
 # --- formatting helpers ---
@@ -262,6 +265,67 @@ confirm_or_exit() {
       exit 1
     fi
   fi
+}
+
+# --- vm:type helpers ---
+
+# Map a character to a QEMU sendkey name.
+# QEMU key names: https://qemu-project.gitlab.io/qemu/system/keys.html
+char_to_key() {
+  local c="$1"
+  # LC_ALL=C ensures [a-z] and [A-Z] match ASCII ranges only,
+  # not locale-dependent collation (where [a-z] can include A-Z).
+  LC_ALL=C
+  case "$c" in
+    # Letters (lowercase)
+    [a-z]) echo "$c" ;;
+    # Letters (uppercase)
+    [A-Z]) echo "shift-$(echo "$c" | tr '[:upper:]' '[:lower:]')" ;;
+    # Digits
+    [0-9]) echo "$c" ;;
+    # Symbols — unshifted
+    ' ')  echo "spc" ;;
+    '-')  echo "minus" ;;
+    '=')  echo "equal" ;;
+    '[')  echo "bracket_left" ;;
+    ']')  echo "bracket_right" ;;
+    '\\') echo "backslash" ;;
+    ';')  echo "semicolon" ;;
+    "'")  echo "apostrophe" ;;
+    '\`')  echo "grave_accent" ;;
+    ',')  echo "comma" ;;
+    '.')  echo "dot" ;;
+    '/')  echo "slash" ;;
+    # Symbols — shifted
+    '!')  echo "shift-1" ;;
+    '@')  echo "shift-2" ;;
+    '#')  echo "shift-3" ;;
+    '$')  echo "shift-4" ;; # Note: use single quotes around '$' in caller
+    '%')  echo "shift-5" ;;
+    '^')  echo "shift-6" ;;
+    '&')  echo "shift-7" ;;
+    '*')  echo "shift-8" ;;
+    '(')  echo "shift-9" ;;
+    ')')  echo "shift-0" ;;
+    '_')  echo "shift-minus" ;;
+    '+')  echo "shift-equal" ;;
+    '{')  echo "shift-bracket_left" ;;
+    '}')  echo "shift-bracket_right" ;;
+    '|')  echo "shift-backslash" ;;
+    ':')  echo "shift-semicolon" ;;
+    '"')  echo "shift-apostrophe" ;;
+    '~')  echo "shift-grave_accent" ;;
+    '<')  echo "shift-comma" ;;
+    '>')  echo "shift-dot" ;;
+    '?')  echo "shift-slash" ;;
+    # Tab and newline
+    $'\t') echo "tab" ;;
+    $'\n') echo "ret" ;;
+    *)
+      echo "Warning: unmapped character '$c', skipping" >&2
+      return 1
+      ;;
+  esac
 }
 
 # --- disk:format helpers ---

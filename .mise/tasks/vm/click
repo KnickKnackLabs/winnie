@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+#MISE description="Click at coordinates in a running winnie VM"
+#USAGE flag "--vm <name>" help="VM identifier (from vm:list)"
+#USAGE flag "--right" help="Right-click instead of left-click"
+#USAGE flag "--double" help="Double-click"
+#USAGE arg "<x>" help="X coordinate"
+#USAGE arg "<y>" help="Y coordinate"
+set -euo pipefail
+
+source "$MISE_CONFIG_ROOT/lib/common.sh"
+
+resolve_vm "${usage_vm:-}"
+
+X="${usage_x}"
+Y="${usage_y}"
+RIGHT="${usage_right:-false}"
+DOUBLE="${usage_double:-false}"
+
+# QEMU mouse_button values: 1=left, 2=middle, 4=right
+BUTTON=1
+[[ "$RIGHT" == "true" ]] && BUTTON=4
+
+# Move mouse to absolute position
+monitor_cmd "mouse_move $X $Y" >/dev/null
+sleep 0.05
+
+# Click: press then release
+monitor_cmd "mouse_button $BUTTON" >/dev/null
+sleep 0.05
+monitor_cmd "mouse_button 0" >/dev/null
+
+if [[ "$DOUBLE" == "true" ]]; then
+  sleep 0.1
+  monitor_cmd "mouse_button $BUTTON" >/dev/null
+  sleep 0.05
+  monitor_cmd "mouse_button 0" >/dev/null
+fi

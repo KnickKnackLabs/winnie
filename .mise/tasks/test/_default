@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 #MISE description="Run all tests"
+#USAGE arg "[filter]" help="Optional: path to specific test file or directory" default=""
 set -euo pipefail
 
-bats "$MISE_CONFIG_ROOT/tests/"
+if [[ -n "${usage_filter:-}" ]]; then
+  bats "$usage_filter"
+else
+  # Run unit tests by default (excludes slow integration/ tests)
+  bats "$MISE_CONFIG_ROOT/tests/"
+fi
