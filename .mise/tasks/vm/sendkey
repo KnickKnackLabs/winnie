@@ -2,7 +2,7 @@
 #MISE description="Send a key press to a running winnie VM"
 #USAGE flag "--vm <name>" help="VM identifier (from vm:list)"
 #USAGE flag "-d --delay <ms>" help="Hold time in milliseconds" default="100"
-#USAGE arg "<key>" help="Key name — e.g., ret, tab, shift-a, ctrl-alt-delete"
+#USAGE arg "<keys>" help="Key name(s) — e.g., ret, tab, shift-a, ctrl-alt-delete" var=#true
 set -euo pipefail
 
 source "$MISE_CONFIG_ROOT/lib/common.sh"
@@ -11,4 +11,9 @@ resolve_vm "${usage_vm:-}"
 
 DELAY="${usage_delay:-100}"
 
-monitor_cmd "sendkey ${usage_key} $DELAY" >/dev/null
+# Send all keys in one batch connection
+{
+  for key in $(echo "${usage_keys:-}"); do
+    echo "sendkey $key $DELAY"
+  done
+} | monitor_batch

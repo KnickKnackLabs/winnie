@@ -267,6 +267,14 @@ confirm_or_exit() {
   fi
 }
 
+# Send multiple commands to the QEMU monitor on a single connection.
+# Reads commands from stdin, one per line.
+# Usage: echo -e "cmd1\ncmd2" | monitor_batch
+# Requires: MONITOR_SOCK to be set (via resolve_vm).
+monitor_batch() {
+  socat -t 1 - "UNIX-CONNECT:$MONITOR_SOCK" 2>/dev/null >/dev/null || return 1
+}
+
 # --- vm:type helpers ---
 
 # Map a character to a QEMU sendkey name.

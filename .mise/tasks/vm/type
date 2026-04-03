@@ -12,11 +12,11 @@ resolve_vm "${usage_vm:-}"
 DELAY="${usage_delay:-50}"
 TEXT="${usage_text}"
 
-# Type each character
-for (( i=0; i<${#TEXT}; i++ )); do
-  c="${TEXT:$i:1}"
-  key=$(char_to_key "$c") || continue
-  monitor_cmd "sendkey $key $DELAY" >/dev/null
-  # Small inter-key delay to avoid dropped keys
-  sleep 0.05
-done
+# Build all sendkey commands, then send in one batch
+{
+  for (( i=0; i<${#TEXT}; i++ )); do
+    c="${TEXT:$i:1}"
+    key=$(char_to_key "$c") || continue
+    echo "sendkey $key $DELAY"
+  done
+} | monitor_batch
