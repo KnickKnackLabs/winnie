@@ -13,6 +13,8 @@ resolve_vm "${usage_vm:-}"
 
 X="${usage_x}"
 Y="${usage_y}"
+
+# TODO: validate that X and Y are numeric (non-numeric values pass to QEMU unchecked)
 RIGHT="${usage_right:-false}"
 DOUBLE="${usage_double:-false}"
 

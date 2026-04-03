@@ -275,7 +275,7 @@ char_to_key() {
   local c="$1"
   # LC_ALL=C ensures [a-z] and [A-Z] match ASCII ranges only,
   # not locale-dependent collation (where [a-z] can include A-Z).
-  LC_ALL=C
+  local LC_ALL=C
   case "$c" in
     # Letters (lowercase)
     [a-z]) echo "$c" ;;
@@ -292,7 +292,7 @@ char_to_key() {
     '\\') echo "backslash" ;;
     ';')  echo "semicolon" ;;
     "'")  echo "apostrophe" ;;
-    '\`')  echo "grave_accent" ;;
+    '`')  echo "grave_accent" ;;
     ',')  echo "comma" ;;
     '.')  echo "dot" ;;
     '/')  echo "slash" ;;

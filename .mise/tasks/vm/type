@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #MISE description="Type a string into a running winnie VM"
 #USAGE flag "--vm <name>" help="VM identifier (from vm:list)"
-#USAGE flag "-d --delay <ms>" help="Delay between keystrokes in milliseconds" default="50"
+#USAGE flag "-d --delay <ms>" help="Key hold time in milliseconds (QEMU sendkey hold parameter)" default="50"
 #USAGE arg "<text>" help="Text to type"
 set -euo pipefail
 

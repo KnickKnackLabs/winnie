@@ -5,7 +5,7 @@
 #
 # These tests require QEMU and an Alpine ISO in the store.
 # Run separately from the main test suite:
-#   mise run test -- tests/test_vm_input.bats
+#   mise run test tests/integration/test_vm_input.bats
 #
 # Skips gracefully if prerequisites are missing.
 

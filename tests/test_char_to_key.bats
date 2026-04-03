@@ -138,6 +138,12 @@ setup() {
   [ "$output" = "shift-slash" ]
 }
 
+@test "char_to_key: backtick → grave_accent" {
+  run char_to_key '`'
+  [ "$status" -eq 0 ]
+  [ "$output" = "grave_accent" ]
+}
+
 @test "char_to_key: ~ → shift-grave_accent" {
   run char_to_key "~"
   [ "$status" -eq 0 ]
