@@ -272,7 +272,15 @@ confirm_or_exit() {
 # Usage: echo -e "cmd1\ncmd2" | monitor_batch
 # Requires: MONITOR_SOCK to be set (via resolve_vm).
 monitor_batch() {
-  socat -t 1 - "UNIX-CONNECT:$MONITOR_SOCK" 2>/dev/null >/dev/null || return 1
+  local line
+  {
+    while IFS= read -r line; do
+      printf '%s\n' "$line"
+      # Small delay between commands to avoid overwhelming QEMU's HID
+      # emulation (e.g. dropped keys when typing long strings).
+      sleep 0.02
+    done
+  } | socat -t 1 - "UNIX-CONNECT:$MONITOR_SOCK" 2>/dev/null >/dev/null || return 1
 }
 
 # --- vm:type helpers ---

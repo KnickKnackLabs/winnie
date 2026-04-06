@@ -13,7 +13,7 @@ DELAY="${usage_delay:-100}"
 
 # Send all keys in one batch connection
 {
-  for key in $(echo "${usage_keys:-}"); do
+  for key in ${usage_keys:-}; do
     echo "sendkey $key $DELAY"
   done
 } | monitor_batch
