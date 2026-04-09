@@ -12,6 +12,9 @@ fi
 found=false
 shopt -s nullglob
 for sock in "$WINNIE_RUN_DIR"/*.sock; do
+  # Skip QMP sockets — vm:boot creates both <vm>.sock (HMP monitor) and
+  # <vm>.qmp.sock; only list HMP sockets as the canonical VM identifier.
+  [[ "$sock" == *.qmp.sock ]] && continue
   [[ -S "$sock" ]] || continue
   vm_id="$(basename "$sock" .sock)"
   # Check if the socket is actually connected to a live QEMU process
@@ -19,8 +22,9 @@ for sock in "$WINNIE_RUN_DIR"/*.sock; do
     echo "$vm_id"
     found=true
   else
-    # Stale socket — clean up
-    rm -f "$sock"
+    # Stale socket — clean up the HMP socket plus any sibling QMP socket
+    # so we don't leave a half-removed VM in the run dir.
+    rm -f "$sock" "${sock%.sock}.qmp.sock"
   fi
 done
 

@@ -127,6 +127,9 @@ resolve_vm() {
     shopt -u nullglob
     local live=()
     for sock in "${socks[@]}"; do
+      # Skip QMP sockets — vm:boot creates both <vm>.sock (HMP monitor) and
+      # <vm>.qmp.sock side by side; the HMP socket is the canonical VM ID.
+      [[ "$sock" == *.qmp.sock ]] && continue
       [[ -S "$sock" ]] || continue
       if printf '' | socat - "UNIX-CONNECT:$sock" >/dev/null 2>&1; then
         live+=("$(basename "$sock" .sock)")

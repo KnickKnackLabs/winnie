@@ -108,3 +108,90 @@ setup() {
   run resolve_machine x86_64
   [ "$output" = "" ]
 }
+
+# --- resolve_vm autodetect with sockets on disk ---
+#
+# Exercises resolve_vm's autodetect path against a fake WINNIE_RUN_DIR.
+# Real unix-domain listening sockets are created with `socat` running in
+# the background — socat handles accept/close cleanly (unlike a python
+# listener that never accepts), so the `printf '' | socat -` probe inside
+# resolve_vm returns promptly without hanging.
+#
+# The focus is the *.qmp.sock filter: vm:boot creates <vm>.sock and
+# <vm>.qmp.sock side by side, and resolve_vm must ignore the latter or it
+# reports "multiple VMs running" against a single VM.
+
+_make_listening_sock() {
+  # Create a background socat listener on path $1. The listener will
+  # accept any incoming connection and immediately close it (sending to
+  # /dev/null), which is enough for the probe in resolve_vm to consider
+  # the socket "live". Returns the pid of the background socat.
+  local path="$1"
+  socat "UNIX-LISTEN:$path,fork" SYSTEM:"true" >/dev/null 2>&1 &
+  local pid=$!
+  # Wait briefly for socat to bind before returning.
+  local i
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    [[ -S "$path" ]] && return 0
+    sleep 0.05
+  done
+  echo "Error: socat did not create socket at $path" >&2
+  kill "$pid" 2>/dev/null || true
+  return 1
+}
+
+_resolve_vm_setup() {
+  RESOLVE_TMP="$(mktemp -d)"
+  WINNIE_RUN_DIR="$RESOLVE_TMP"
+  RESOLVE_PIDS=()
+}
+
+_resolve_vm_make() {
+  _make_listening_sock "$1" || return 1
+  RESOLVE_PIDS+=("$!")
+}
+
+_resolve_vm_teardown() {
+  # Kill all socat listeners spawned during the test.
+  pkill -P $$ -f "socat UNIX-LISTEN:$RESOLVE_TMP" 2>/dev/null || true
+  rm -rf "$RESOLVE_TMP"
+}
+
+@test "resolve_vm autodetect skips .qmp.sock sibling" {
+  _resolve_vm_setup
+  _resolve_vm_make "$RESOLVE_TMP/vm1.sock"
+  _resolve_vm_make "$RESOLVE_TMP/vm1.qmp.sock"
+  resolve_vm ""
+  local rc=$?
+  local got_id="$VM_ID"
+  local got_sock="$MONITOR_SOCK"
+  _resolve_vm_teardown
+  [ "$rc" -eq 0 ]
+  [ "$got_id" = "vm1" ]
+  [ "$got_sock" = "$WINNIE_RUN_DIR/vm1.sock" ]
+}
+
+@test "resolve_vm autodetect two VMs errors, excludes .qmp siblings from list" {
+  _resolve_vm_setup
+  _resolve_vm_make "$RESOLVE_TMP/vm1.sock"
+  _resolve_vm_make "$RESOLVE_TMP/vm1.qmp.sock"
+  _resolve_vm_make "$RESOLVE_TMP/vm2.sock"
+  _resolve_vm_make "$RESOLVE_TMP/vm2.qmp.sock"
+  run resolve_vm ""
+  _resolve_vm_teardown
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"multiple VMs running"* ]]
+  [[ "$output" == *"vm1"* ]]
+  [[ "$output" == *"vm2"* ]]
+  # The error list must NOT contain the .qmp siblings
+  [[ "$output" != *"vm1.qmp"* ]]
+  [[ "$output" != *"vm2.qmp"* ]]
+}
+
+@test "resolve_vm autodetect with no sockets errors" {
+  _resolve_vm_setup
+  run resolve_vm ""
+  _resolve_vm_teardown
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"no running VMs"* ]]
+}

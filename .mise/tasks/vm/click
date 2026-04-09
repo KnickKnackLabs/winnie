@@ -31,7 +31,8 @@ import tempfile
 import time
 
 
-WINNIE_RUN_DIR = os.path.join(os.environ.get("TMPDIR", "/tmp"), "winnie")
+# Match bash's ${TMPDIR:-/tmp} semantics: empty TMPDIR falls through to /tmp.
+WINNIE_RUN_DIR = os.path.join(os.environ.get("TMPDIR") or "/tmp", "winnie")
 
 
 def die(msg: str, code: int = 1) -> None:
@@ -105,13 +106,14 @@ def screendump(monitor_sock: str) -> tuple[int, int]:
             # -f png asks QEMU for PNG format; without it QEMU defaults
             # to PPM and we can't read dimensions from the IHDR.
             s.sendall(f"screendump {path} -f png\n".encode())
-            # HMP writes the file synchronously but buffers its prompt response;
-            # give it a moment to finish the write before we read the file.
-            time.sleep(0.15)
-        for _ in range(10):
+        # Poll for the file to be written. QEMU handles screendump
+        # synchronously on the monitor but the filesystem entry may lag
+        # briefly. We need at least 24 bytes for the PNG IHDR (8 magic +
+        # 4 length + 4 type + 8 width/height).
+        for _ in range(40):
             if os.path.exists(path) and os.path.getsize(path) >= 24:
                 break
-            time.sleep(0.05)
+            time.sleep(0.01)
         return read_png_dims(path)
     finally:
         try:
@@ -179,10 +181,16 @@ class QmpClient:
 
 
 def px_to_norm(x: int, y: int, w: int, h: int) -> tuple[int, int]:
-    """Clamp pixel coords and scale to QEMU's 0..32767 abs range."""
+    """Clamp pixel coords and scale to QEMU's 0..32767 abs range.
+
+    Uses (w - 1) / (h - 1) as the denominator so the rightmost / bottom
+    pixel maps exactly to 32767. Degenerate 1x1 framebuffers land at 0.
+    """
     x = max(0, min(w - 1, x))
     y = max(0, min(h - 1, y))
-    return (x * 32767) // w, (y * 32767) // h
+    nx = (x * 32767) // (w - 1) if w > 1 else 0
+    ny = (y * 32767) // (h - 1) if h > 1 else 0
+    return nx, ny
 
 
 def main() -> int:
