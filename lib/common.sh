@@ -148,6 +148,7 @@ resolve_vm() {
   VM_ID="${VM_ID%.iso}"
 
   MONITOR_SOCK="$WINNIE_RUN_DIR/$VM_ID.sock"
+  QMP_SOCK="$WINNIE_RUN_DIR/$VM_ID.qmp.sock"
 
   if [[ ! -S "$MONITOR_SOCK" ]]; then
     echo "Error: no running VM found for $VM_ID" >&2
