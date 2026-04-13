@@ -1,39 +1,239 @@
-#!/usr/bin/env bash
+#!/usr/bin/env -S uv run --script
 #MISE description="Click at coordinates in a running winnie VM"
 #USAGE flag "--vm <name>" help="VM identifier (from vm:list)"
 #USAGE flag "--right" help="Right-click instead of left-click"
 #USAGE flag "--double" help="Double-click"
-#USAGE arg "<x>" help="X coordinate"
-#USAGE arg "<y>" help="Y coordinate"
-set -euo pipefail
+#USAGE arg "<x>" help="X coordinate (pixel)"
+#USAGE arg "<y>" help="Y coordinate (pixel)"
+# /// script
+# requires-python = ">=3.10"
+# dependencies = []
+# ///
+"""Click at pixel coordinates in a running winnie VM.
 
-source "$MISE_CONFIG_ROOT/lib/common.sh"
+Uses QEMU's QMP input-send-event API to send absolute pointer events to the
+guest. QMP's abs events use normalized coordinates in the 0..32767 range, so
+we read the current framebuffer dimensions from a screendump and scale pixels
+to that range.
 
-resolve_vm "${usage_vm:-}"
+Why not HMP? QEMU's legacy HMP mouse_move command does not reliably route
+events to modern usb-tablet / virtio-tablet devices — it silently no-ops for
+absolute input devices in practice. QMP input-send-event is the supported
+path for scripted input in QEMU 5.0+.
+"""
+import json
+import os
+import socket
+import struct
+import subprocess
+import sys
+import tempfile
+import time
 
-X="${usage_x}"
-Y="${usage_y}"
 
-# TODO: validate that X and Y are numeric (non-numeric values pass to QEMU unchecked)
-RIGHT="${usage_right:-false}"
-DOUBLE="${usage_double:-false}"
+# Match bash's ${TMPDIR:-/tmp} semantics: empty TMPDIR falls through to /tmp.
+WINNIE_RUN_DIR = os.path.join(os.environ.get("TMPDIR") or "/tmp", "winnie")
 
-# QEMU mouse_button values: 1=left, 2=middle, 4=right
-BUTTON=1
-[[ "$RIGHT" == "true" ]] && BUTTON=4
 
-# Move mouse to absolute position
-monitor_cmd "mouse_move $X $Y" >/dev/null
-sleep 0.05
+def die(msg: str, code: int = 1) -> None:
+    print(f"Error: {msg}", file=sys.stderr)
+    sys.exit(code)
 
-# Click: press then release
-monitor_cmd "mouse_button $BUTTON" >/dev/null
-sleep 0.05
-monitor_cmd "mouse_button 0" >/dev/null
 
-if [[ "$DOUBLE" == "true" ]]; then
-  sleep 0.1
-  monitor_cmd "mouse_button $BUTTON" >/dev/null
-  sleep 0.05
-  monitor_cmd "mouse_button 0" >/dev/null
-fi
+def resolve_vm(name: str) -> tuple[str, str, str]:
+    """Return (vm_id, monitor_sock, qmp_sock) for the given VM name.
+
+    If name is empty, auto-detect the single running VM.
+    """
+    if not name:
+        if not os.path.isdir(WINNIE_RUN_DIR):
+            die("no running VMs found.")
+        live = []
+        for fn in os.listdir(WINNIE_RUN_DIR):
+            if fn.endswith(".qmp.sock"):
+                continue
+            if not fn.endswith(".sock"):
+                continue
+            path = os.path.join(WINNIE_RUN_DIR, fn)
+            try:
+                s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                s.settimeout(0.5)
+                s.connect(path)
+                s.close()
+                live.append(fn[:-5])  # strip .sock
+            except OSError:
+                continue
+        if not live:
+            die("no running VMs found.")
+        if len(live) > 1:
+            die("multiple VMs running. Specify one with --vm:\n  " + "\n  ".join(live))
+        name = live[0]
+
+    # Strip extensions if user passed an image/iso filename
+    vm_id = os.path.basename(name)
+    for ext in (".img", ".iso"):
+        if vm_id.endswith(ext):
+            vm_id = vm_id[: -len(ext)]
+    monitor = os.path.join(WINNIE_RUN_DIR, f"{vm_id}.sock")
+    qmp = os.path.join(WINNIE_RUN_DIR, f"{vm_id}.qmp.sock")
+    if not os.path.exists(monitor):
+        die(f"no running VM found for {vm_id}\nIs it booted? Check: winnie vm:list")
+    return vm_id, monitor, qmp
+
+
+def read_png_dims(path: str) -> tuple[int, int]:
+    """Read width/height from PNG IHDR (bytes 16..24, big-endian uint32 pair)."""
+    with open(path, "rb") as f:
+        header = f.read(24)
+    if len(header) < 24 or header[:8] != b"\x89PNG\r\n\x1a\n":
+        raise ValueError(f"not a PNG: {path}")
+    w, h = struct.unpack(">II", header[16:24])
+    return w, h
+
+
+def screendump(monitor_sock: str) -> tuple[int, int]:
+    """Capture a screendump via HMP and return framebuffer (w, h).
+
+    Used to get the current guest resolution so we can normalize pixel
+    coordinates to QMP's 0..32767 abs range.
+    """
+    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+        path = tmp.name
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+            s.settimeout(2.0)
+            s.connect(monitor_sock)
+            # -f png asks QEMU for PNG format; without it QEMU defaults
+            # to PPM and we can't read dimensions from the IHDR.
+            s.sendall(f"screendump {path} -f png\n".encode())
+        # Poll for the file to be written. QEMU handles screendump
+        # synchronously on the monitor but the filesystem entry may lag
+        # briefly. We need at least 24 bytes for the PNG IHDR (8 magic +
+        # 4 length + 4 type + 8 width/height).
+        for _ in range(40):
+            if os.path.exists(path) and os.path.getsize(path) >= 24:
+                break
+            time.sleep(0.01)
+        return read_png_dims(path)
+    finally:
+        try:
+            os.unlink(path)
+        except FileNotFoundError:
+            pass
+
+
+class QmpClient:
+    """Minimal QMP client. Opens a fresh connection per command batch.
+
+    QMP handshake: server sends greeting, client must send qmp_capabilities
+    before any other command is accepted. We do the handshake in connect()
+    and then leave the connection open for one or more execute() calls.
+    """
+
+    def __init__(self, sock_path: str):
+        self.sock_path = sock_path
+        self._s: socket.socket | None = None
+        self._f = None
+
+    def __enter__(self) -> "QmpClient":
+        if not os.path.exists(self.sock_path):
+            die(
+                f"QMP socket not found at {self.sock_path}\n"
+                f"This VM was likely booted with an older winnie that did not "
+                f"include -qmp. Reboot it with the current vm:boot."
+            )
+        self._s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self._s.settimeout(2.0)
+        self._s.connect(self.sock_path)
+        self._f = self._s.makefile("rw", encoding="utf-8")
+        greeting = json.loads(self._f.readline())
+        if "QMP" not in greeting:
+            die(f"unexpected QMP greeting: {greeting}")
+        self.execute("qmp_capabilities")
+        return self
+
+    def __exit__(self, *_exc) -> None:
+        try:
+            if self._s is not None:
+                self._s.close()
+        except OSError:
+            pass
+
+    def execute(self, command: str, arguments: dict | None = None) -> dict:
+        assert self._f is not None
+        payload: dict = {"execute": command}
+        if arguments is not None:
+            payload["arguments"] = arguments
+        self._f.write(json.dumps(payload) + "\n")
+        self._f.flush()
+        # Drain responses, skipping async events (keys: "event"), return
+        # the first dict containing "return" or "error".
+        while True:
+            line = self._f.readline()
+            if not line:
+                die("QMP connection closed unexpectedly")
+            resp = json.loads(line)
+            if "return" in resp:
+                return resp["return"]
+            if "error" in resp:
+                die(f"QMP {command} failed: {resp['error']}")
+            # ignore events and keep reading
+
+
+def px_to_norm(x: int, y: int, w: int, h: int) -> tuple[int, int]:
+    """Clamp pixel coords and scale to QEMU's 0..32767 abs range.
+
+    Uses (w - 1) / (h - 1) as the denominator so the rightmost / bottom
+    pixel maps exactly to 32767. Degenerate 1x1 framebuffers land at 0.
+    """
+    x = max(0, min(w - 1, x))
+    y = max(0, min(h - 1, y))
+    nx = (x * 32767) // (w - 1) if w > 1 else 0
+    ny = (y * 32767) // (h - 1) if h > 1 else 0
+    return nx, ny
+
+
+def main() -> int:
+    vm_name = os.environ.get("usage_vm", "")
+    right = os.environ.get("usage_right", "false") == "true"
+    double = os.environ.get("usage_double", "false") == "true"
+    try:
+        x = int(os.environ["usage_x"])
+        y = int(os.environ["usage_y"])
+    except (KeyError, ValueError) as e:
+        die(f"invalid x/y: {e}")
+
+    _vm_id, monitor_sock, qmp_sock = resolve_vm(vm_name)
+
+    try:
+        fb_w, fb_h = screendump(monitor_sock)
+    except Exception as e:
+        die(f"could not read framebuffer dimensions via screendump: {e}")
+
+    nx, ny = px_to_norm(x, y, fb_w, fb_h)
+    button = "right" if right else "left"
+
+    move_events = [
+        {"type": "abs", "data": {"axis": "x", "value": nx}},
+        {"type": "abs", "data": {"axis": "y", "value": ny}},
+    ]
+    press = [{"type": "btn", "data": {"button": button, "down": True}}]
+    release = [{"type": "btn", "data": {"button": button, "down": False}}]
+
+    with QmpClient(qmp_sock) as qmp:
+        qmp.execute("input-send-event", {"events": move_events})
+        time.sleep(0.05)
+        qmp.execute("input-send-event", {"events": press})
+        time.sleep(0.05)
+        qmp.execute("input-send-event", {"events": release})
+        if double:
+            time.sleep(0.1)
+            qmp.execute("input-send-event", {"events": press})
+            time.sleep(0.05)
+            qmp.execute("input-send-event", {"events": release})
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

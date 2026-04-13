@@ -178,6 +178,11 @@ MONITOR_SOCK="$WINNIE_RUN_DIR/$VM_ID.sock"
 rm -f "$MONITOR_SOCK"
 QEMU_ARGS+=(-monitor "unix:$MONITOR_SOCK,server,nowait")
 
+# QMP socket for modern input-send-event (HMP mouse_move is broken on virtio/usb tablets)
+QMP_SOCK="$WINNIE_RUN_DIR/$VM_ID.qmp.sock"
+rm -f "$QMP_SOCK"
+QEMU_ARGS+=(-qmp "unix:$QMP_SOCK,server,nowait")
+
 # Headless: serial console instead of GUI
 if [[ "$HEADLESS" == "true" ]]; then
   QEMU_ARGS+=(-nographic -serial mon:stdio)
