@@ -28,6 +28,18 @@ for sock in "$WINNIE_RUN_DIR"/*.sock; do
   fi
 done
 
+# Clean up orphaned stale QMP sockets whose HMP sibling is already gone.
+# If the QMP socket is still live, leave it alone — that's an unusual state,
+# but deleting a live control socket from a read-only command is worse.
+for sock in "$WINNIE_RUN_DIR"/*.qmp.sock; do
+  [[ -S "$sock" ]] || continue
+  hmp_sock="${sock%.qmp.sock}.sock"
+  [[ -S "$hmp_sock" ]] && continue
+  if ! printf '' | socat - "UNIX-CONNECT:$sock" >/dev/null 2>&1; then
+    rm -f "$sock"
+  fi
+done
+
 if [[ "$found" != "true" ]]; then
   echo "No running VMs."
 fi

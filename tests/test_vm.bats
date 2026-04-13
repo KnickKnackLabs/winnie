@@ -141,14 +141,13 @@ _make_listening_sock() {
 }
 
 _resolve_vm_setup() {
+  command -v socat >/dev/null 2>&1 || skip "socat not installed"
   RESOLVE_TMP="$(mktemp -d)"
   WINNIE_RUN_DIR="$RESOLVE_TMP"
-  RESOLVE_PIDS=()
 }
 
 _resolve_vm_make() {
   _make_listening_sock "$1" || return 1
-  RESOLVE_PIDS+=("$!")
 }
 
 _resolve_vm_teardown() {
