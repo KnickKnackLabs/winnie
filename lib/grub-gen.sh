@@ -54,7 +54,7 @@ GRUBHEAD
       else
         params="$params inst.stage2=hd:LABEL=WINNIE:/distros/$slug"
       fi
-      if ! echo "$params" | grep -q 'inst.repo='; then
+      if [[ -f "$dir/repodata/repomd.xml" ]] && ! echo "$params" | grep -q 'inst.repo='; then
         params="$params inst.repo=hd:LABEL=WINNIE:/distros/$slug"
       fi
     elif [[ -n "$squashfs" ]]; then

@@ -64,7 +64,7 @@ if [[ -d "$DISTRO_DIR" ]]; then
 fi
 
 mkdir -p "$DISTRO_DIR"
-cp -r "$EXTRACT_DIR"/* "$DISTRO_DIR/"
+cp -R "$EXTRACT_DIR"/. "$DISTRO_DIR/"
 echo "  Copied files to /distros/$SLUG/"
 
 # --- Step 4: Regenerate grub.cfg ---
