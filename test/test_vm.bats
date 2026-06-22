@@ -6,7 +6,7 @@
 load test_helper
 
 setup() {
-  source "$MISE_CONFIG_ROOT/lib/common.sh"
+  source "$REPO_DIR/lib/common.sh"
 }
 
 # --- normalize_arch ---
@@ -136,7 +136,7 @@ _make_listening_sock() {
     sleep 0.05
   done
   echo "Error: socat did not create socket at $path" >&2
-  kill "$pid" 2>/dev/null || true
+  if ! kill "$pid" 2>/dev/null; then :; fi
   return 1
 }
 
@@ -152,7 +152,7 @@ _resolve_vm_make() {
 
 _resolve_vm_teardown() {
   # Kill all socat listeners spawned during the test.
-  pkill -P $$ -f "socat UNIX-LISTEN:$RESOLVE_TMP" 2>/dev/null || true
+  if ! pkill -P $$ -f "socat UNIX-LISTEN:$RESOLVE_TMP" 2>/dev/null; then :; fi
   rm -rf "$RESOLVE_TMP"
 }
 

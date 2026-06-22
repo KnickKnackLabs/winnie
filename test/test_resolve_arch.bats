@@ -5,7 +5,7 @@
 load test_helper
 
 setup() {
-  source "$MISE_CONFIG_ROOT/lib/common.sh"
+  source "$REPO_DIR/lib/common.sh"
 }
 
 # --- alpine ---
@@ -54,7 +54,7 @@ setup() {
   [ "$output" = "arm64" ]
 }
 
-# --- pop-os (x86 only) ---
+# --- pop-os ---
 
 @test "resolve_arch pop-os x86_64 maps to amd64" {
   run resolve_arch pop-os x86_64
@@ -66,6 +66,26 @@ setup() {
   run resolve_arch pop-os aarch64
   [ "$status" -eq 0 ]
   [ "$output" = "arm64" ]
+}
+
+# --- fedora ---
+
+@test "resolve_arch fedora x86_64" {
+  run resolve_arch fedora x86_64
+  [ "$status" -eq 0 ]
+  [ "$output" = "x86_64" ]
+}
+
+@test "resolve_arch fedora aarch64" {
+  run resolve_arch fedora aarch64
+  [ "$status" -eq 0 ]
+  [ "$output" = "aarch64" ]
+}
+
+@test "resolve_arch fedora arm64 normalizes to aarch64" {
+  run resolve_arch fedora arm64
+  [ "$status" -eq 0 ]
+  [ "$output" = "aarch64" ]
 }
 
 # --- mint (x86 only) ---

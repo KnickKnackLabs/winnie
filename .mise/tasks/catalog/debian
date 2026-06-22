@@ -29,7 +29,8 @@ fetch_version_detail() {
   sha_content=$(curl -fsSL "$base/SHA256SUMS" 2>/dev/null) || { echo "Error: Debian $VERSION not found for $ARCH. This distro may not publish ISOs for this architecture." >&2; exit 1; }
 
   echo "$sha_content" | grep '\.iso$' | awk '{print $2 "|" $1}' | while IFS='|' read -r filename sha256; do
-    variant=$(echo "$filename" | sed "s/.*${ARCH}-\(.*\)\.iso/\1/")
+    variant="${filename#*"${ARCH}"-}"
+    variant="${variant%.iso}"
     echo "$filename|$variant|$sha256"
   done | jq -R --arg base "$base" '
     split("|") | {

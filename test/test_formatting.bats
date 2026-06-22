@@ -5,7 +5,7 @@
 load test_helper
 
 setup() {
-  source "$MISE_CONFIG_ROOT/lib/common.sh"
+  source "$REPO_DIR/lib/common.sh"
 }
 
 # --- human_bytes ---
@@ -100,12 +100,12 @@ setup() {
 # --- confirm_or_exit ---
 
 @test "confirm_or_exit: skipped when SKIP_CONFIRM=true" {
-  run bash -c 'source "$MISE_CONFIG_ROOT/lib/common.sh"; SKIP_CONFIRM=true confirm_or_exit "Do it?"'
+  run bash -c 'source "$REPO_DIR/lib/common.sh"; SKIP_CONFIRM=true confirm_or_exit "Do it?"'
   [ "$status" -eq 0 ]
 }
 
 @test "confirm_or_exit: fails with message when no TTY and no --yes" {
-  run bash -c 'source "$MISE_CONFIG_ROOT/lib/common.sh"; SKIP_CONFIRM=false confirm_or_exit "Do it?" < /dev/null'
+  run bash -c 'source "$REPO_DIR/lib/common.sh"; SKIP_CONFIRM=false confirm_or_exit "Do it?" < /dev/null'
   [ "$status" -ne 0 ]
   [[ "$output" == *"no TTY available"* ]]
   [[ "$output" == *"--yes"* ]]

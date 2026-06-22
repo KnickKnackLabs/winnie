@@ -18,7 +18,9 @@ if [[ ! -b "$PART_DATA" ]]; then
 fi
 
 # Check if already mounted
-MOUNT_POINT=$(findmnt -n -o TARGET "$PART_DATA" 2>/dev/null || true)
+if ! MOUNT_POINT=$(findmnt -n -o TARGET "$PART_DATA" 2>/dev/null); then
+  MOUNT_POINT=""
+fi
 MOUNTED_BY_US=false
 
 if [[ -z "$MOUNT_POINT" ]]; then
@@ -39,21 +41,30 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo ""
 
 count=0
+rows=()
 for dir in "$DISTROS_DIR"/*/; do
   [[ -d "$dir" ]] || continue
   slug=$(basename "$dir")
   if [[ -f "$dir/manifest.json" ]]; then
     title=$(jq -r '.title' "$dir/manifest.json")
-    kernel=$(jq -r '.kernel_path' "$dir/manifest.json" | xargs basename)
-    has_squashfs="no"
-    [[ -n "$(jq -r '.squashfs_path // empty' "$dir/manifest.json")" ]] && has_squashfs="yes"
     size=$(du -sh "$dir" | cut -f1)
-    printf "  %-40s %8s  %s\n" "$slug" "$size" "$title"
+    rows+=("$slug|$size|$title")
   else
-    printf "  %-40s %8s  %s\n" "$slug" "?" "(no manifest)"
+    rows+=("$slug|?|(no manifest)")
   fi
   count=$((count + 1))
 done
+
+if [[ $count -gt 0 ]]; then
+  if command -v gum >/dev/null 2>&1; then
+    printf '%s\n' "${rows[@]}" | gum table -s '|' -c "DISTRO,SIZE,TITLE" -p
+  else
+    for row in "${rows[@]}"; do
+      IFS='|' read -r slug size title <<< "$row"
+      printf "  %-40s %8s  %s\n" "$slug" "$size" "$title"
+    done
+  fi
+fi
 
 if [[ $count -eq 0 ]]; then
   echo "  No distros found."

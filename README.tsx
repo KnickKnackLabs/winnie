@@ -62,16 +62,24 @@ function scanCatalog(): { name: string; task: string }[] {
 }
 
 // Count BATS tests
-function countTests(): number {
-  const testsDir = join(ROOT, "tests");
+function batsFiles(): string[] {
+  const testsDir = join(ROOT, "test");
   try {
     return readdirSync(testsDir)
       .filter(f => f.endsWith(".bats"))
-      .reduce((count, f) => {
-        const content = readFileSync(join(testsDir, f), "utf-8");
-        return count + (content.match(/@test /g) || []).length;
-      }, 0);
-  } catch { return 0; }
+      .map(f => join(testsDir, f));
+  } catch { return []; }
+}
+
+function countTests(): number {
+  return batsFiles().reduce((count, path) => {
+    const content = readFileSync(path, "utf-8");
+    return count + (content.match(/@test /g) || []).length;
+  }, 0);
+}
+
+function countBatsFiles(): number {
+  return batsFiles().length;
 }
 
 const commands = scanTasks(TASKS_DIR);
@@ -119,6 +127,7 @@ const art = [
   "    │ ▓▓▓▓▓▓▓▓ │",
   "    │  Alpine   │",
   "    │  Debian   │",
+  "    │  Fedora   │",
   "    │  Pop!_OS  │",
   "    └────┬┬────┘",
   "         ││",
@@ -152,13 +161,16 @@ const readme = (
 
     <Section title="Quick start">
       <CodeBlock lang="bash">{`# Browse what's available
-winnie catalog:pop-os
+winnie catalog:fedora --arch x86_64
+winnie catalog:pop-os --arch x86_64
 
-# Download an ISO
-winnie iso:get pop-os -v 24.04 --variant generic
+# Download ISOs
+winnie iso:get fedora -v 44 --arch x86_64 --variant workstation
+winnie iso:get pop-os -v 24.04 --arch x86_64 --variant generic
 
-# Create a bootable disk image
-winnie disk:format --image disk.img --size 4096 --arch x86_64
+# Create a bootable multi-distro disk image
+winnie disk:format --image disk.img --size 8192 --arch x86_64
+winnie disk:add ~/.local/share/winnie/isos/Fedora-Workstation-Live-*.iso --image disk.img
 winnie disk:add ~/.local/share/winnie/isos/pop-os_*.iso --image disk.img
 
 # Boot it
@@ -173,7 +185,7 @@ winnie vm:boot --image disk.img --uefi`}</CodeBlock>
     <Section title="Flash a USB drive">
       <CodeBlock lang="bash">{`# Create and populate the image
 winnie disk:format --image multiboot.img --size 8192 --arch x86_64
-winnie disk:add alpine.iso --image multiboot.img
+winnie disk:add fedora.iso --image multiboot.img
 winnie disk:add pop-os.iso --image multiboot.img
 
 # Write to USB
@@ -331,7 +343,7 @@ winnie vm:console                 # Interactive QEMU monitor`}</CodeBlock>
       <CodeBlock lang="bash">{`mise run test`}</CodeBlock>
 
       <Paragraph>
-        {`${testCount} tests across ${readdirSync(join(ROOT, "tests")).filter(f => f.endsWith(".bats")).length} BATS files — architecture helpers, GRUB generation, ISO extraction, disk format routing.`}
+        {`${testCount} tests across ${countBatsFiles()} BATS files — architecture helpers, GRUB generation, ISO extraction, disk format routing.`}
       </Paragraph>
     </Section>
   </>

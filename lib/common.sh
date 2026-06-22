@@ -39,6 +39,12 @@ resolve_arch() {
         aarch64) echo "arm64" ;;
         *) return 1 ;;
       esac ;;
+    fedora)
+      case "$raw" in
+        x86_64)  echo "x86_64" ;;
+        aarch64) echo "aarch64" ;;
+        *) return 1 ;;
+      esac ;;
     mint)
       case "$raw" in
         x86_64) echo "64bit" ;;
@@ -165,7 +171,9 @@ resolve_vm() {
 # Requires: MONITOR_SOCK to be set (via resolve_vm).
 # Sets: QEMU_PID
 resolve_vm_pid() {
-  QEMU_PID="$(pgrep -f "unix:$MONITOR_SOCK" 2>/dev/null | head -1)" || true
+  if ! QEMU_PID="$(pgrep -f "unix:$MONITOR_SOCK" 2>/dev/null | head -1)"; then
+    QEMU_PID=""
+  fi
   if [[ -z "$QEMU_PID" ]]; then
     echo "Error: could not find QEMU process for $VM_ID" >&2
     return 1
@@ -181,10 +189,7 @@ monitor_cmd() {
   printf '%s\n' "$raw" \
     | tr -d '\r' \
     | sed 's/\x1b\[[0-9;]*[a-zA-Z]//g; s/\x1b\[[0-9]*[A-Z]//g' \
-    | grep -v '^(qemu)' \
-    | grep -v '^QEMU' \
-    | grep -v '^$' \
-    || true
+    | awk '/^\(qemu\)/ { next } /^QEMU/ { next } /^$/ { next } { print }'
 }
 
 # --- formatting helpers ---
@@ -309,7 +314,7 @@ char_to_key() {
     '=')  echo "equal" ;;
     '[')  echo "bracket_left" ;;
     ']')  echo "bracket_right" ;;
-    '\\') echo "backslash" ;;
+    \\)   echo "backslash" ;;
     ';')  echo "semicolon" ;;
     "'")  echo "apostrophe" ;;
     '`')  echo "grave_accent" ;;

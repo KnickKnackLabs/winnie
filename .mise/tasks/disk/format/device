@@ -60,7 +60,7 @@ fi
 echo "winnie: format"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
-lsblk "$DEVICE" 2>/dev/null || true
+if ! lsblk "$DEVICE" 2>/dev/null; then :; fi
 echo ""
 echo "This will DESTROY all data on $DEVICE and create:"
 echo "  Part 1: BIOS Boot     ($BIOS_BOOT_SIZE)"
@@ -77,7 +77,7 @@ SKIP_CONFIRM="$SKIP_CONFIRM" confirm_or_exit "Proceed with formatting $DEVICE?"
 echo "Unmounting existing partitions..."
 for part in "${DEVICE}"*; do
   if mountpoint -q "$part" 2>/dev/null || mount | grep -q "^$part "; then
-    umount "$part" 2>/dev/null || true
+    if ! umount "$part" 2>/dev/null; then :; fi
   fi
 done
 

@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+#MISE description="Show available Fedora Workstation versions"
+#USAGE flag "-v --version <version>" help="Show variants for a specific version"
+#USAGE flag "--arch <arch>" help="Architecture (default: host)" default=""
+#USAGE flag "--json" help="Output as JSON"
+set -euo pipefail
+
+MIRROR="https://dl.fedoraproject.org/pub/fedora/linux/releases"
+VERSION="${usage_version:-}"
+JSON="${usage_json:-false}"
+VARIANT="workstation"
+
+source "$MISE_CONFIG_ROOT/lib/common.sh"
+
+ARCH=$(resolve_arch fedora "${usage_arch:-}") || { echo "Error: Fedora Workstation does not publish ISOs for architecture '${usage_arch:-$(uname -m)}'." >&2; exit 1; }
+
+fetch_version_detail() {
+  local base html iso checksum_file checksum sha256 size
+  base="$MIRROR/$VERSION/Workstation/$ARCH/iso"
+
+  html=$(curl -fsSL "$base/") || { echo "Error: Fedora $VERSION not found for $ARCH. This distro may not publish Workstation ISOs for this architecture." >&2; exit 1; }
+  iso=$(echo "$html" | sed -n 's/.*href="\(Fedora-Workstation-Live-[^"]*\.iso\)".*/\1/p' | head -1)
+  if [[ -z "$iso" ]]; then
+    echo "Error: no Fedora Workstation ISO found for $VERSION ($ARCH)." >&2
+    exit 1
+  fi
+
+  checksum_file=$(echo "$html" | sed -n 's/.*href="\(Fedora-Workstation-[^"]*CHECKSUM\)".*/\1/p' | head -1)
+  checksum=""
+  if [[ -n "$checksum_file" ]]; then
+    checksum=$(curl -fsSL "$base/$checksum_file" 2>/dev/null || echo "")
+  fi
+
+  sha256=$(echo "$checksum" | awk -v iso="$iso" '$2 == "(" iso ")" { print $4; exit }')
+  size=$(echo "$checksum" | awk -v iso="$iso" '$2 == iso ":" { print $3; exit }')
+  size="${size:-0}"
+
+  jq -n \
+    --arg filename "$iso" \
+    --arg variant "$VARIANT" \
+    --arg arch "$ARCH" \
+    --arg url "$base/$iso" \
+    --arg sha256 "$sha256" \
+    --argjson size "$size" \
+    '[{filename: $filename, variant: $variant, arch: $arch, url: $url, sha256: $sha256, size: $size}]'
+}
+
+fetch_version_list() {
+  local html
+  html=$(curl -fsSL "$MIRROR/")
+  echo "$html" \
+    | sed -n 's/.*href="\([0-9][0-9]*\)\/".*/\1/p' \
+    | sort -n -u \
+    | jq -R '{version: ., variants: ["workstation"]}' \
+    | jq -s 'sort_by(.version | tonumber)'
+}
+
+if [[ -n "$VERSION" ]]; then
+  entries=$(spin "Fetching Fedora $VERSION ($ARCH)..." bash -c "$(declare -f fetch_version_detail); VERSION='$VERSION' MIRROR='$MIRROR' ARCH='$ARCH' VARIANT='$VARIANT' fetch_version_detail")
+
+  if [[ "$JSON" == "true" ]]; then
+    echo "$entries" | jq .
+  else
+    gum style --bold "Fedora Workstation $VERSION"
+    echo ""
+    echo "$entries" | jq -r '["Filename","Variant","Arch","Size"], (.[] | [.filename, .variant, .arch, ((.size / 1024 / 1024 | floor | tostring) + "MB")]) | @csv' \
+      | tr -d '"' | gum table -p -w 55,14,10,10
+  fi
+else
+  entries=$(spin "Fetching Fedora versions..." bash -c "$(declare -f fetch_version_list); MIRROR='$MIRROR' fetch_version_list")
+
+  if [[ "$JSON" == "true" ]]; then
+    echo "$entries" | jq .
+  else
+    gum style --bold "Fedora Workstation — available versions"
+    echo ""
+    echo "$entries" | jq -r '["Version","Variants"], (.[] | [.version, (.variants | join(" / "))]) | @csv' \
+      | tr -d '"' | gum table -p -w 10,20
+  fi
+fi

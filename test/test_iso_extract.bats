@@ -159,6 +159,32 @@ EOF
   [ -f "$OUTPUT_DIR/initrd.img" ]
 }
 
+@test "iso:extract handles Fedora EFI grub and squashfs image layout" {
+  local root="$TEST_DIR/iso_root"
+  rm -rf "$root"
+  mkdir -p "$root/EFI/BOOT" "$root/images/pxeboot" "$root/LiveOS"
+
+  echo "fake-fedora-kernel" > "$root/images/pxeboot/vmlinuz"
+  echo "fake-fedora-initrd" > "$root/images/pxeboot/initrd.img"
+  echo "fake-fedora-squashfs" > "$root/LiveOS/squashfs.img"
+
+  cat > "$root/EFI/BOOT/grub.cfg" << 'EOF'
+menuentry 'Start Fedora-Workstation-Live 44' {
+    linuxefi /images/pxeboot/vmlinuz root=live:CDLABEL=Fedora-WS-Live-44 rd.live.image quiet
+    initrdefi /images/pxeboot/initrd.img
+}
+EOF
+
+  make_mock_iso "$TEST_DIR/test.iso" "$root"
+  run winnie iso:extract -- "$TEST_DIR/test.iso" --output "$OUTPUT_DIR"
+  [ "$status" -eq 0 ]
+  [ -f "$OUTPUT_DIR/vmlinuz" ]
+  [ -f "$OUTPUT_DIR/initrd.img" ]
+  [ -f "$OUTPUT_DIR/squashfs.img" ]
+  [ "$(jq -r '.title' "$OUTPUT_DIR/manifest.json")" = "Start Fedora-Workstation-Live 44" ]
+  [ "$(jq -r '.squashfs_path' "$OUTPUT_DIR/manifest.json")" = "LiveOS/squashfs.img" ]
+}
+
 # --- error handling ---
 
 @test "iso:extract fails if ISO doesn't exist" {

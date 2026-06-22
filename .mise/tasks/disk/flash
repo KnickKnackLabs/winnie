@@ -5,6 +5,8 @@
 #USAGE flag "-y --yes" help="Skip confirmation prompt"
 set -euo pipefail
 
+source "$MISE_CONFIG_ROOT/lib/common.sh"
+
 IMAGE="${usage_image}"
 DEVICE="${usage_device}"
 SKIP_CONFIRM="${usage_yes:-false}"
@@ -69,9 +71,13 @@ elif [[ "$OS" == "Linux" ]]; then
   fi
 
   # Safety: refuse to flash the root disk
-  root_dev=$(findmnt -n -o SOURCE / 2>/dev/null || true)
+  if ! root_dev=$(findmnt -n -o SOURCE / 2>/dev/null); then
+    root_dev=""
+  fi
   if [[ -n "$root_dev" ]]; then
-    root_disk=$(lsblk -ndo PKNAME "$root_dev" 2>/dev/null || true)
+    if ! root_disk=$(lsblk -ndo PKNAME "$root_dev" 2>/dev/null); then
+      root_disk=""
+    fi
     root_disk="${root_disk:-$(basename "$root_dev")}"
     if [[ "$(basename "$DEVICE")" == "$root_disk" ]]; then
       echo "Error: refusing to flash the root disk ($DEVICE)." >&2
@@ -110,7 +116,7 @@ if [[ "$OS" == "Darwin" ]]; then
 else
   for part in "${DEVICE}"*; do
     if mount | grep -q "^$part "; then
-      umount "$part" 2>/dev/null || true
+      if ! umount "$part" 2>/dev/null; then :; fi
     fi
   done
 fi
@@ -129,5 +135,6 @@ echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "Done! $DEVICE is ready."
 echo ""
-echo "Test with QEMU:"
-echo "  winnie vm:boot --device $DEVICE --uefi"
+echo "Next steps:"
+echo "  diskutil eject $DEVICE"
+echo "  Boot the target machine from the USB drive."

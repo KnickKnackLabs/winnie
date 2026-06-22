@@ -5,7 +5,7 @@
 #
 # These tests require QEMU and an Alpine ISO in the store.
 # Run separately from the main test suite:
-#   mise run test tests/integration/test_vm_input.bats
+#   mise run test test/integration/test_vm_input.bats
 #
 # Skips gracefully if prerequisites are missing.
 
@@ -64,11 +64,11 @@ teardown_file() {
   local vm_name
   vm_name="$(basename "${TEST_IMAGE:-}" .img)"
   if [[ -n "$vm_name" ]]; then
-    winnie vm:kill --vm "$vm_name" 2>/dev/null || true
+    if ! winnie vm:kill --vm "$vm_name" 2>/dev/null; then :; fi
   fi
 
   # Clean up image
-  rm -f "${TEST_IMAGE:-}" 2>/dev/null || true
+  if ! rm -f "${TEST_IMAGE:-}" 2>/dev/null; then :; fi
 }
 
 # Helper: take a screenshot and return the path.

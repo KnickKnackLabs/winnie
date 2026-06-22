@@ -14,7 +14,7 @@ setup() {
 # --- mock helpers ---
 
 # Mock a catalog task to return canned JSON.
-# Uses mise's task_config includes — first include wins.
+# Uses mise's task_config includes — later includes override earlier ones.
 mock_catalog() {
   local distro="$1" json="$2"
   local mock_dir="$BATS_TEST_TMPDIR/mocks/.mise/tasks/catalog"
@@ -26,7 +26,7 @@ SCRIPT
   chmod +x "$mock_dir/$distro"
 }
 
-# Build overlay mise.toml: mocks first, then real tasks
+# Build overlay mise.toml: real tasks first, then mocks
 setup_overlay() {
   export OVERLAY="$BATS_TEST_TMPDIR/overlay"
   mkdir -p "$OVERLAY"
@@ -42,12 +42,12 @@ coreutils = "latest"
 
 [task_config]
 includes = [
+  "$REPO_DIR/.mise/tasks",
   "$BATS_TEST_TMPDIR/mocks/.mise/tasks",
-  "$MISE_CONFIG_ROOT/.mise/tasks",
 ]
 EOF
-  ln -sf "$MISE_CONFIG_ROOT/lib" "$OVERLAY/lib"
-  git -C "$OVERLAY" init -q -b main 2>/dev/null || true
+  ln -sf "$REPO_DIR/lib" "$OVERLAY/lib"
+  if ! git -C "$OVERLAY" init -q -b main 2>/dev/null; then :; fi
   mise trust "$OVERLAY/mise.toml" 2>/dev/null
 }
 
@@ -76,8 +76,12 @@ SCRIPT
 # Run iso:get through the overlay (needed for catalog mocking)
 run_iso_get() {
   setup_overlay
-  WINNIE_ISO_DIR="$ISO_DIR" CURL="${CURL:-curl}" MOCK_CURL_CONTENT_FILE="${MOCK_CURL_CONTENT_FILE:-}" \
-    run mise -C "$OVERLAY" run -q iso:get -- "$@" 2>&1
+  run env \
+    WINNIE_ISO_DIR="$ISO_DIR" \
+    WINNIE_TASK_ROOT="$OVERLAY" \
+    CURL="${CURL:-curl}" \
+    MOCK_CURL_CONTENT_FILE="${MOCK_CURL_CONTENT_FILE:-}" \
+    mise -C "$OVERLAY" run -q iso:get -- "$@"
 }
 
 # --- argument validation ---
