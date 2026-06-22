@@ -18,13 +18,19 @@ GRUBHEAD
 
   for manifest in "$mount_point"/distros/*/manifest.json; do
     [[ -f "$manifest" ]] || continue
-    local dir slug title kernel initrd params
+    local dir slug title kernel initrd params extract_mode install_img
     dir=$(dirname "$manifest")
     slug=$(basename "$dir")
 
     title=$(jq -r '.title' "$manifest")
-    kernel=$(basename "$(jq -r '.kernel_path' "$manifest")")
-    initrd=$(basename "$(jq -r '.initrd_path' "$manifest")")
+    extract_mode=$(jq -r '.extract_mode // "flat"' "$manifest")
+    if [[ "$extract_mode" == "tree" ]]; then
+      kernel=$(jq -r '.kernel_path' "$manifest")
+      initrd=$(jq -r '.initrd_path' "$manifest")
+    else
+      kernel=$(basename "$(jq -r '.kernel_path' "$manifest")")
+      initrd=$(basename "$(jq -r '.initrd_path' "$manifest")")
+    fi
     params=$(jq -r '.boot_params' "$manifest")
 
     # Strip iso-specific params that don't apply to extracted boot
@@ -37,11 +43,21 @@ GRUBHEAD
     params=$(echo "$params" | sed 's|quiet||g; s|splash||g; s|\$extra_kernel_parameters||g' | sed 's/  */ /g; s/^ //; s/ $//')
     params="$params plymouth.enable=0"
 
-    # Ensure live-media pointers target the extracted location on the winnie drive.
-    # Debian/Ubuntu casper uses live-media-path; Fedora/dracut uses root=live + rd.live.dir.
+    # Ensure boot-media pointers target the extracted location on the winnie drive.
     local squashfs
     squashfs=$(jq -r '.squashfs_path // empty' "$manifest")
-    if [[ -n "$squashfs" ]]; then
+    install_img=$(jq -r '.install_img_path // empty' "$manifest")
+    if [[ -n "$install_img" ]]; then
+      if echo "$params" | grep -q 'inst.stage2='; then
+        # shellcheck disable=SC2001  # sed keeps the Anaconda boot-parameter rewrite readable
+        params=$(echo "$params" | sed "s|inst.stage2=[^ ]*|inst.stage2=hd:LABEL=WINNIE:/distros/$slug|g")
+      else
+        params="$params inst.stage2=hd:LABEL=WINNIE:/distros/$slug"
+      fi
+      if ! echo "$params" | grep -q 'inst.repo='; then
+        params="$params inst.repo=hd:LABEL=WINNIE:/distros/$slug"
+      fi
+    elif [[ -n "$squashfs" ]]; then
       if echo "$params" | grep -Eq '(^| )rd\.live\.image($| )|root=live:'; then
         if echo "$params" | grep -q 'root=live:'; then
           # shellcheck disable=SC2001  # sed keeps the boot-parameter rewrite readable

@@ -185,6 +185,41 @@ EOF
   [ "$(jq -r '.squashfs_path' "$OUTPUT_DIR/manifest.json")" = "LiveOS/squashfs.img" ]
 }
 
+@test "iso:extract preserves Fedora Server installer tree" {
+  local root="$TEST_DIR/iso_root"
+  rm -rf "$root"
+  mkdir -p "$root/EFI/BOOT" "$root/images/pxeboot" "$root/images" "$root/repodata" "$root/Packages"
+
+  echo "fake-server-kernel" > "$root/images/pxeboot/vmlinuz"
+  echo "fake-server-initrd" > "$root/images/pxeboot/initrd.img"
+  echo "fake-server-stage2" > "$root/images/install.img"
+  echo "fake-treeinfo" > "$root/.treeinfo"
+  echo "fake-media-repo" > "$root/media.repo"
+  echo "fake-repodata" > "$root/repodata/repomd.xml"
+  echo "fake-package" > "$root/Packages/example.rpm"
+
+  cat > "$root/EFI/BOOT/grub.cfg" << 'EOF'
+menuentry 'Install Fedora 42' {
+    linuxefi /images/pxeboot/vmlinuz inst.stage2=hd:LABEL=Fedora-S-dvd-x86_64-42 quiet
+    initrdefi /images/pxeboot/initrd.img
+}
+EOF
+
+  make_mock_iso "$TEST_DIR/test.iso" "$root"
+  run winnie iso:extract -- "$TEST_DIR/test.iso" --output "$OUTPUT_DIR"
+  [ "$status" -eq 0 ]
+  [ -f "$OUTPUT_DIR/images/pxeboot/vmlinuz" ]
+  [ -f "$OUTPUT_DIR/images/pxeboot/initrd.img" ]
+  [ -f "$OUTPUT_DIR/images/install.img" ]
+  [ -f "$OUTPUT_DIR/.treeinfo" ]
+  [ -f "$OUTPUT_DIR/media.repo" ]
+  [ -f "$OUTPUT_DIR/repodata/repomd.xml" ]
+  [ -f "$OUTPUT_DIR/Packages/example.rpm" ]
+  [ "$(jq -r '.title' "$OUTPUT_DIR/manifest.json")" = "Install Fedora 42" ]
+  [ "$(jq -r '.install_img_path' "$OUTPUT_DIR/manifest.json")" = "images/install.img" ]
+  [ "$(jq -r '.extract_mode' "$OUTPUT_DIR/manifest.json")" = "tree" ]
+}
+
 # --- error handling ---
 
 @test "iso:extract fails if ISO doesn't exist" {

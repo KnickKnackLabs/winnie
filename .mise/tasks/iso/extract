@@ -98,24 +98,43 @@ if [[ -n "$INITRD_LINE" ]]; then
   INITRD_PATH=$(clean_grub_path "$(echo "$INITRD_LINE" | awk '{print $2}')")
 fi
 
-# --- Step 3: Find and extract squashfs ---
+# --- Step 3: Find payload files ---
 
-# Look for squashfs files in the ISO
-SQUASHFS_PATH=$(7zz l "$ISO" 2>/dev/null | awk 'tolower($NF) ~ /(filesystem\.squashfs|squashfs\.img)$/ && first == "" { first = $NF } END { if (first != "") print first }')
+ISO_LIST=$(7zz l "$ISO" 2>/dev/null)
+SQUASHFS_PATH=$(echo "$ISO_LIST" | awk 'tolower($NF) ~ /(filesystem\.squashfs|squashfs\.img)$/ && first == "" { first = $NF } END { if (first != "") print first }')
+INSTALL_IMG_PATH=$(echo "$ISO_LIST" | awk '$NF == "images/install.img" { print $NF; exit }')
+EXTRACT_MODE="flat"
+if [[ -n "$INSTALL_IMG_PATH" && "$BOOT_PARAMS" == *"inst.stage2="* ]]; then
+  EXTRACT_MODE="tree"
+fi
 
 # --- Step 4: Extract boot files ---
 
 KERNEL_FILENAME=$(basename "$KERNEL_PATH")
-7zz e "$ISO" "$KERNEL_PATH" -o"$OUTPUT" -y >/dev/null 2>&1
+INITRD_FILENAME=""
+SQUASHFS_FILENAME=""
+INSTALL_IMG_FILENAME=""
 
-if [[ -n "$INITRD_PATH" ]]; then
-  INITRD_FILENAME=$(basename "$INITRD_PATH")
-  7zz e "$ISO" "$INITRD_PATH" -o"$OUTPUT" -y >/dev/null 2>&1
+if [[ "$EXTRACT_MODE" == "tree" ]]; then
+  7zz x "$ISO" -o"$OUTPUT" -y >/dev/null 2>&1
+else
+  7zz e "$ISO" "$KERNEL_PATH" -o"$OUTPUT" -y >/dev/null 2>&1
+
+  if [[ -n "$INITRD_PATH" ]]; then
+    INITRD_FILENAME=$(basename "$INITRD_PATH")
+    7zz e "$ISO" "$INITRD_PATH" -o"$OUTPUT" -y >/dev/null 2>&1
+  fi
+
+  if [[ -n "$SQUASHFS_PATH" ]]; then
+    SQUASHFS_FILENAME=$(basename "$SQUASHFS_PATH")
+    7zz e "$ISO" "$SQUASHFS_PATH" -o"$OUTPUT" -y >/dev/null 2>&1
+  fi
 fi
 
-if [[ -n "$SQUASHFS_PATH" ]]; then
-  SQUASHFS_FILENAME=$(basename "$SQUASHFS_PATH")
-  7zz e "$ISO" "$SQUASHFS_PATH" -o"$OUTPUT" -y >/dev/null 2>&1
+if [[ "$EXTRACT_MODE" == "tree" ]]; then
+  [[ -n "$INITRD_PATH" ]] && INITRD_FILENAME=$(basename "$INITRD_PATH")
+  [[ -n "$SQUASHFS_PATH" ]] && SQUASHFS_FILENAME=$(basename "$SQUASHFS_PATH")
+  [[ -n "$INSTALL_IMG_PATH" ]] && INSTALL_IMG_FILENAME=$(basename "$INSTALL_IMG_PATH")
 fi
 
 # --- Step 5: Write manifest ---
@@ -126,16 +145,25 @@ jq -n \
   --arg initrd_path "${INITRD_PATH:-}" \
   --arg boot_params "$BOOT_PARAMS" \
   --arg squashfs_path "${SQUASHFS_PATH:-}" \
+  --arg install_img_path "${INSTALL_IMG_PATH:-}" \
+  --arg extract_mode "$EXTRACT_MODE" \
   '{
     title: $title,
     kernel_path: $kernel_path,
     initrd_path: $initrd_path,
     boot_params: $boot_params,
-    squashfs_path: $squashfs_path
+    squashfs_path: $squashfs_path,
+    install_img_path: $install_img_path,
+    extract_mode: $extract_mode
   }' > "$OUTPUT/manifest.json"
 
-echo "Extracted: $TITLE"
+if [[ "$EXTRACT_MODE" == "tree" ]]; then
+  echo "Extracted installer tree: $TITLE"
+else
+  echo "Extracted: $TITLE"
+fi
 echo "  Kernel:   $KERNEL_FILENAME"
 [[ -n "$INITRD_PATH" ]] && echo "  Initrd:   $INITRD_FILENAME"
 [[ -n "$SQUASHFS_PATH" ]] && echo "  Squashfs: $SQUASHFS_FILENAME"
+[[ -n "$INSTALL_IMG_PATH" ]] && echo "  Stage2:   $INSTALL_IMG_FILENAME"
 echo "  Manifest: $OUTPUT/manifest.json"
