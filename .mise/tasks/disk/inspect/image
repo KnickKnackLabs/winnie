@@ -82,10 +82,10 @@ if mount /dev/mapper/\${LOOPNAME}p3 /mnt/data 2>/dev/null; then
       size=\$(du -sh \"\$dir\" | cut -f1)
       title='(no manifest)'
       if [[ -f \"\$dir/manifest.json\" ]]; then
-        apt-get install -y -qq jq >/dev/null 2>&1 || true
+        if ! apt-get install -y -qq jq >/dev/null 2>&1; then :; fi
         title=\$(jq -r '.title' \"\$dir/manifest.json\" 2>/dev/null || echo '?')
       fi
-      printf '    %-40s %8s  %s\n' \"\$slug\" \"\$size\" \"\$title\"
+      printf '    %-40s %8s  %s\n' \"\$slug\" \"\$size\" \"\$title\" # codebase:ignore gum-table — runs inside minimal Docker image without gum
     done
   else
     echo '    (none)'

@@ -6,7 +6,7 @@ load test_helper
 
 setup() {
   export TEST_DIR="$BATS_TEST_TMPDIR"
-  source "$MISE_CONFIG_ROOT/lib/grub-gen.sh"
+  source "$REPO_DIR/lib/grub-gen.sh"
 }
 
 # Helper: create a fake distro with a manifest
@@ -84,6 +84,16 @@ make_distro() {
   grub_generate "$TEST_DIR"
   local cfg="$TEST_DIR/boot/grub/grub.cfg"
   grep -q 'live-media-path=/distros/debian-std' "$cfg"
+}
+
+@test "grub_generate rewrites Fedora live root and rd.live.dir" {
+  make_distro "fedora" "Fedora Workstation" "images/pxeboot/vmlinuz" "images/pxeboot/initrd.img" "root=live:CDLABEL=Fedora-WS-Live-44 rd.live.image quiet" "LiveOS/squashfs.img"
+  grub_generate "$TEST_DIR"
+  local cfg="$TEST_DIR/boot/grub/grub.cfg"
+  grep -q 'root=live:LABEL=WINNIE' "$cfg"
+  grep -q 'rd.live.dir=/distros/fedora' "$cfg"
+  ! grep -q 'CDLABEL=Fedora-WS-Live-44' "$cfg"
+  ! grep -q 'live-media-path=/distros/fedora' "$cfg"
 }
 
 @test "grub_generate does not add live-media-path when no squashfs" {

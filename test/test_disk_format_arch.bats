@@ -6,7 +6,7 @@
 load test_helper
 
 setup() {
-  source "$MISE_CONFIG_ROOT/lib/common.sh"
+  source "$REPO_DIR/lib/common.sh"
 }
 
 # --- ALL_ARCHES ---

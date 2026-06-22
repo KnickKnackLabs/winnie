@@ -144,11 +144,11 @@ mount "$PART_DATA" "$MOUNT_DATA"
 mount "$PART_EFI" "$MOUNT_EFI"
 
 cleanup() {
-  umount "$MOUNT_EFI" 2>/dev/null || true
-  umount "$MOUNT_DATA" 2>/dev/null || true
+  if ! umount "$MOUNT_EFI" 2>/dev/null; then :; fi
+  if ! umount "$MOUNT_DATA" 2>/dev/null; then :; fi
   if $USE_KPARTX; then
-    kpartx -dv "$DISK" 2>/dev/null || true
-    losetup -d "$DISK" 2>/dev/null || true
+    if ! kpartx -dv "$DISK" 2>/dev/null; then :; fi
+    if ! losetup -d "$DISK" 2>/dev/null; then :; fi
   fi
 }
 trap cleanup EXIT

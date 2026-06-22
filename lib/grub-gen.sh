@@ -33,16 +33,31 @@ GRUBHEAD
     # Strip splash params — Plymouth can't render its progress bar in QEMU
     # (needs DRM/KMS driver in initramfs, which stock live ISOs don't include
     # for virtual GPUs). Show text boot progress instead.
+    # shellcheck disable=SC2016  # intentional: strip the literal GRUB variable name
     params=$(echo "$params" | sed 's|quiet||g; s|splash||g; s|\$extra_kernel_parameters||g' | sed 's/  */ /g; s/^ //; s/ $//')
     params="$params plymouth.enable=0"
 
-    # Ensure live-media-path points at the extracted location on the winnie drive.
-    # Some distros include it in their boot params (rewrite), others don't (add).
-    # Only relevant when a squashfs was extracted.
+    # Ensure live-media pointers target the extracted location on the winnie drive.
+    # Debian/Ubuntu casper uses live-media-path; Fedora/dracut uses root=live + rd.live.dir.
     local squashfs
     squashfs=$(jq -r '.squashfs_path // empty' "$manifest")
     if [[ -n "$squashfs" ]]; then
-      if echo "$params" | grep -q 'live-media-path='; then
+      if echo "$params" | grep -Eq '(^| )rd\.live\.image($| )|root=live:'; then
+        if echo "$params" | grep -q 'root=live:'; then
+          # shellcheck disable=SC2001  # sed keeps the boot-parameter rewrite readable
+          params=$(echo "$params" | sed 's|root=live:[^ ]*|root=live:LABEL=WINNIE|g')
+        else
+          params="$params root=live:LABEL=WINNIE"
+        fi
+
+        if echo "$params" | grep -q 'rd.live.dir='; then
+          # shellcheck disable=SC2001  # sed keeps the boot-parameter rewrite readable
+          params=$(echo "$params" | sed "s|rd.live.dir=[^ ]*|rd.live.dir=/distros/$slug|g")
+        else
+          params="$params rd.live.dir=/distros/$slug"
+        fi
+      elif echo "$params" | grep -q 'live-media-path='; then
+        # shellcheck disable=SC2001  # sed keeps the boot-parameter rewrite readable
         params=$(echo "$params" | sed "s|live-media-path=[^ ]*|live-media-path=/distros/$slug|g")
       else
         params="$params live-media-path=/distros/$slug"

@@ -41,7 +41,9 @@ if [[ ! -b "$PART_DATA" ]]; then
   exit 1
 fi
 
-MOUNT_POINT=$(findmnt -n -o TARGET "$PART_DATA" 2>/dev/null || true)
+if ! MOUNT_POINT=$(findmnt -n -o TARGET "$PART_DATA" 2>/dev/null); then
+  MOUNT_POINT=""
+fi
 MOUNTED_BY_US=false
 
 if [[ -z "$MOUNT_POINT" ]]; then

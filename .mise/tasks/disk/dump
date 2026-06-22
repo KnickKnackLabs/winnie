@@ -83,12 +83,18 @@ elif [[ "$OS" == "Linux" ]]; then
   fi
 
   # Safety: refuse to dump the root disk
-  root_dev=$(findmnt -n -o SOURCE / 2>/dev/null || true)
+  if ! root_dev=$(findmnt -n -o SOURCE / 2>/dev/null); then
+    root_dev=""
+  fi
   if [[ -n "$root_dev" ]]; then
-    root_disk=$(lsblk -ndo PKNAME "$root_dev" 2>/dev/null || true)
+    if ! root_disk=$(lsblk -ndo PKNAME "$root_dev" 2>/dev/null); then
+      root_disk=""
+    fi
     root_disk="${root_disk:-$(basename "$root_dev")}"
     dev_base=$(basename "$DEVICE")
-    dev_parent=$(lsblk -ndo PKNAME "$DEVICE" 2>/dev/null || true)
+    if ! dev_parent=$(lsblk -ndo PKNAME "$DEVICE" 2>/dev/null); then
+      dev_parent=""
+    fi
     if [[ "$dev_base" == "$root_disk" || "$dev_parent" == "$root_disk" ]]; then
       echo "Error: refusing to dump the root disk ($DEVICE)." >&2
       exit 1
@@ -167,20 +173,20 @@ SKIP_CONFIRM="$SKIP_CONFIRM" confirm_or_exit "Dump $DEVICE to $IMAGE?"
 echo "Unmounting $DEVICE..."
 if [[ "$OS" == "Darwin" ]]; then
   if [[ "$IS_WHOLE" == "Yes" ]]; then
-    diskutil unmountDisk "$DEVICE" 2>/dev/null || true
+    if ! diskutil unmountDisk "$DEVICE" 2>/dev/null; then :; fi
   else
-    diskutil unmount "$DEVICE" 2>/dev/null || true
+    if ! diskutil unmount "$DEVICE" 2>/dev/null; then :; fi
   fi
 else
   if [[ "$IS_WHOLE" == "Yes" ]]; then
     for part in "${DEVICE}"*; do
       if mount | grep -q "^$part "; then
-        umount "$part" 2>/dev/null || true
+        if ! umount "$part" 2>/dev/null; then :; fi
       fi
     done
   else
     if mount | grep -q "^$DEVICE "; then
-      umount "$DEVICE" 2>/dev/null || true
+      if ! umount "$DEVICE" 2>/dev/null; then :; fi
     fi
   fi
 fi
@@ -192,7 +198,7 @@ BS="4m"
 [[ "$OS" == "Linux" ]] && BS="4M"
 
 if [[ "$DUMP_MODE" == "compact" ]]; then
-  # Round up to nearest 4MB block — overshoot is harmless free space
+  # Round up to nearest 4MB block - overshoot is harmless free space
   BS_BYTES=4194304
   DUMP_BLOCKS=$(( (DUMP_BYTES + BS_BYTES - 1) / BS_BYTES ))
   sudo dd if="$RAW_DEVICE" of="$IMAGE" bs="$BS" count="$DUMP_BLOCKS" status=progress 2>&1

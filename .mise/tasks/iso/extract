@@ -24,47 +24,84 @@ trap 'rm -rf "$WORK"' EXIT
 
 # --- Step 1: Extract grub.cfg from ISO ---
 
-7zz e "$ISO" boot/grub/grub.cfg -o"$WORK" -y >/dev/null 2>&1
-if [[ ! -f "$WORK/grub.cfg" ]]; then
-  echo "Error: no boot/grub/grub.cfg found in ISO." >&2
+GRUB_CFG=""
+for candidate in boot/grub/grub.cfg boot/grub2/grub.cfg EFI/BOOT/grub.cfg EFI/fedora/grub.cfg; do
+  rm -f "$WORK/grub.cfg"
+  if 7zz e "$ISO" "$candidate" -o"$WORK" -y >/dev/null 2>&1 && [[ -f "$WORK/grub.cfg" ]]; then
+    if grep -q '^menuentry' "$WORK/grub.cfg"; then
+      GRUB_CFG="$WORK/grub.cfg"
+      break
+    fi
+  fi
+done
+
+if [[ -z "$GRUB_CFG" ]]; then
+  echo "Error: no supported grub.cfg with a menuentry found in ISO." >&2
   exit 1
 fi
 
-GRUB_CFG="$WORK/grub.cfg"
-
 # --- Step 2: Parse first menuentry ---
 
-TITLE=$(grep -m1 '^menuentry' "$GRUB_CFG" | sed 's/^menuentry[[:space:]]*"\([^"]*\)".*/\1/' || true)
+TITLE=$(awk '
+  /^menuentry[[:space:]]*"/ {
+    sub(/^menuentry[[:space:]]*"/, "")
+    sub(/".*/, "")
+    print
+    exit
+  }
+  /^menuentry[[:space:]]*\047/ {
+    sub(/^menuentry[[:space:]]*\047/, "")
+    sub(/\047.*/, "")
+    print
+    exit
+  }
+' "$GRUB_CFG")
 if [[ -z "$TITLE" ]]; then
   echo "Error: no menuentry found in grub.cfg." >&2
   exit 1
 fi
 
-# Find the linux and initrd lines within the first menuentry block
-LINUX_LINE=$(sed -n '/^menuentry/,/^}/{ /^[[:space:]]*linux[[:space:]]/p; }' "$GRUB_CFG" | head -1)
-INITRD_LINE=$(sed -n '/^menuentry/,/^}/{ /^[[:space:]]*initrd[[:space:]]/p; }' "$GRUB_CFG" | head -1)
+# Find the linux/initrd lines within the first menuentry block.
+# Fedora uses linuxefi/initrdefi; Debian/Ubuntu-style ISOs use linux/initrd.
+LINUX_LINE=$(awk '
+  /^menuentry/ { in_entry=1 }
+  in_entry && /^[[:space:]]*}/ { exit }
+  in_entry && /^[[:space:]]*linux(efi)?[[:space:]]/ { print; exit }
+' "$GRUB_CFG")
+INITRD_LINE=$(awk '
+  /^menuentry/ { in_entry=1 }
+  in_entry && /^[[:space:]]*}/ { exit }
+  in_entry && /^[[:space:]]*initrd(efi)?[[:space:]]/ { print; exit }
+' "$GRUB_CFG")
 
 if [[ -z "$LINUX_LINE" ]]; then
   echo "Error: no linux line found in menuentry." >&2
   exit 1
 fi
 
-# Parse kernel path (first arg after 'linux') — strip leading /
-KERNEL_PATH=$(echo "$LINUX_LINE" | awk '{print $2}' | sed 's|^/||')
+clean_grub_path() {
+  local path="$1"
+  path="${path#(\$root)}"
+  path="${path#/}"
+  echo "$path"
+}
+
+# Parse kernel path (first arg after 'linux') — strip GRUB root prefix and leading /
+KERNEL_PATH=$(clean_grub_path "$(echo "$LINUX_LINE" | awk '{print $2}')")
 
 # Parse boot params (everything after the kernel path)
-BOOT_PARAMS=$(echo "$LINUX_LINE" | sed 's/^[[:space:]]*linux[[:space:]]*[^[:space:]]*//' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*---[[:space:]]*$//')
+BOOT_PARAMS=$(echo "$LINUX_LINE" | awk '{$1=""; $2=""; sub(/^[[:space:]]+/, ""); print}' | sed 's/[[:space:]]*---[[:space:]]*$//')
 
 # Parse initrd path — strip leading /
 INITRD_PATH=""
 if [[ -n "$INITRD_LINE" ]]; then
-  INITRD_PATH=$(echo "$INITRD_LINE" | awk '{print $2}' | sed 's|^/||')
+  INITRD_PATH=$(clean_grub_path "$(echo "$INITRD_LINE" | awk '{print $2}')")
 fi
 
 # --- Step 3: Find and extract squashfs ---
 
 # Look for squashfs files in the ISO
-SQUASHFS_PATH=$(7zz l "$ISO" 2>/dev/null | grep -i '\.squashfs' | awk '{print $NF}' | head -1 || true)
+SQUASHFS_PATH=$(7zz l "$ISO" 2>/dev/null | awk 'tolower($NF) ~ /(filesystem\.squashfs|squashfs\.img)$/ && first == "" { first = $NF } END { if (first != "") print first }')
 
 # --- Step 4: Extract boot files ---
 

@@ -18,7 +18,7 @@ OS="$(uname)"
 
 # Prompt for sudo upfront so password doesn't interrupt output
 if [[ "$OS" == "Darwin" ]]; then
-  sudo -v 2>/dev/null || true
+  if ! sudo -v 2>/dev/null; then :; fi
 fi
 
 # ── macOS ────────────────────────────────────────────────────────
@@ -132,11 +132,11 @@ if [[ "$OS" == "Darwin" ]]; then
           echo "  BOOTAA64.EFI: present (aarch64)"
         fi
 
-        sudo diskutil unmount "$PART_DEV" &>/dev/null || true
+        if ! sudo diskutil unmount "$PART_DEV" &>/dev/null; then :; fi
       else
         echo "  (could not mount)"
       fi
-      rmdir "$EFI_MOUNT" 2>/dev/null || true
+      if ! rmdir "$EFI_MOUNT" 2>/dev/null; then :; fi
     fi
 
     # ── Linux / data partition: note it ───────────────────────
@@ -164,7 +164,7 @@ if [[ "$OS" == "Darwin" ]]; then
     echo ""
     echo "== Deep Inspection =="
     DEEP_DUMP="${TMPDIR:-/tmp}/winnie-inspect-$$.img"
-    trap "rm -f '$DEEP_DUMP'" EXIT
+    trap 'rm -f "$DEEP_DUMP"' EXIT
 
     echo "  Creating compact disk image..."
     mise run -q disk:dump -- --device "$DEVICE" --image "$DEEP_DUMP" --yes
@@ -200,7 +200,7 @@ elif [[ "$OS" == "Linux" ]]; then
   lsblk -o NAME,SIZE,TYPE,FSTYPE,LABEL,MOUNTPOINT "$DEVICE"
   echo ""
   echo "== Filesystem Details =="
-  blkid "${DEVICE}"* 2>/dev/null || true
+  if ! blkid "${DEVICE}"* 2>/dev/null; then :; fi
   echo ""
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 

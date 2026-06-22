@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Download and verify an ISO from the catalog"
-#USAGE arg "<distro>" help="Distribution name (mint, pop-os)"
+#USAGE arg "<distro>" help="Distribution name (alpine, debian, fedora, mint, pop-os)"
 #USAGE flag "-v --version <version>" help="Version to download"
 #USAGE flag "--arch <arch>" help="Architecture (default: host)" default=""
 #USAGE flag "--variant <variant>" help="Variant/channel to download"
@@ -13,6 +13,7 @@ ARCH_FLAG="${usage_arch:-}"
 VARIANT="${usage_variant:-}"
 FORCE="${usage_force:-false}"
 ISO_DIR="${WINNIE_ISO_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/winnie/isos}"
+TASK_ROOT="${WINNIE_TASK_ROOT:-$MISE_CONFIG_ROOT}"
 
 mkdir -p "$ISO_DIR"
 
@@ -25,15 +26,15 @@ die() { echo "Error: $*" >&2; exit 1; }
 # --- validate distro ---
 
 case "$DISTRO" in
-  alpine|debian|mint|pop-os) ;;
-  *) die "unsupported distro '$DISTRO'. Supported: alpine, debian, mint, pop-os" ;;
+  alpine|debian|fedora|mint|pop-os) ;;
+  *) die "unsupported distro '$DISTRO'. Supported: alpine, debian, fedora, mint, pop-os" ;;
 esac
 
 # --- resolve version (interactive if not specified) ---
 
 if [[ -z "$VERSION" ]]; then
   arch_args=(); [[ -n "$ARCH_FLAG" ]] && arch_args=(--arch "$ARCH_FLAG")
-  versions_json=$(spin "Fetching $DISTRO versions..." mise run -q "catalog:$DISTRO" -- --json "${arch_args[@]}")
+  versions_json=$(spin "Fetching $DISTRO versions..." mise -C "$TASK_ROOT" run -q "catalog:$DISTRO" -- --json ${arch_args[@]+"${arch_args[@]}"})
   versions=$(echo "$versions_json" | jq -r '.[].version')
 
   [[ -z "$versions" ]] && die "no versions found for $DISTRO"
@@ -48,7 +49,7 @@ fi
 # --- fetch ISO details for the chosen version ---
 
 arch_args=(); [[ -n "$ARCH_FLAG" ]] && arch_args=(--arch "$ARCH_FLAG")
-detail_json=$(spin "Fetching $DISTRO $VERSION details..." mise run -q "catalog:$DISTRO" -- --version "$VERSION" --json "${arch_args[@]}")
+detail_json=$(spin "Fetching $DISTRO $VERSION details..." mise -C "$TASK_ROOT" run -q "catalog:$DISTRO" -- --version "$VERSION" --json ${arch_args[@]+"${arch_args[@]}"})
 
 [[ -z "$detail_json" || "$detail_json" == "[]" ]] && die "no ISOs found for $DISTRO $VERSION"
 

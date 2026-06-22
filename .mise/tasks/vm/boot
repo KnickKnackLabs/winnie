@@ -85,7 +85,7 @@ fi
 
 # Network: user-mode NAT by default (guest gets internet, host can't reach guest)
 if [[ "$NO_NET" != "true" ]]; then
-  QEMU_ARGS+=(-nic user,model=virtio-net-pci)
+  QEMU_ARGS+=(-nic "user,model=virtio-net-pci")
 fi
 
 # --- UEFI firmware ---

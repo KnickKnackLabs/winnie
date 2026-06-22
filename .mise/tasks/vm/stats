@@ -26,7 +26,7 @@ NUM_CPUS="$(echo "$CPUS_RAW" | grep -c 'CPU #')"
 
 # QEMU monitor: block stats (primary disk only)
 BLOCKSTATS_RAW="$(monitor_cmd 'info blockstats')"
-DISK_LINE="$(echo "$BLOCKSTATS_RAW" | grep '^virtio' | head -1)" || true
+DISK_LINE="$(echo "$BLOCKSTATS_RAW" | awk '/^virtio/ { print; exit }')"
 
 RD_BYTES=0 WR_BYTES=0 RD_OPS=0 WR_OPS=0
 if [[ -n "$DISK_LINE" ]]; then
