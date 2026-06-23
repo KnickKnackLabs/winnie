@@ -11,7 +11,7 @@ setup() {
 
 # Helper: create a fake distro with a manifest
 make_distro() {
-  local slug="$1" title="$2" kernel="$3" initrd="$4" params="${5:-}" squashfs="${6:-}"
+  local slug="$1" title="$2" kernel="$3" initrd="$4" params="${5:-}" squashfs="${6:-}" install_img="${7:-}" extract_mode="${8:-flat}"
   local dir="$TEST_DIR/distros/$slug"
   mkdir -p "$dir"
   jq -n \
@@ -20,7 +20,9 @@ make_distro() {
     --arg initrd_path "$initrd" \
     --arg boot_params "$params" \
     --arg squashfs_path "$squashfs" \
-    '{title: $title, kernel_path: $kernel_path, initrd_path: $initrd_path, boot_params: $boot_params, squashfs_path: $squashfs_path}' \
+    --arg install_img_path "$install_img" \
+    --arg extract_mode "$extract_mode" \
+    '{title: $title, kernel_path: $kernel_path, initrd_path: $initrd_path, boot_params: $boot_params, squashfs_path: $squashfs_path, install_img_path: $install_img_path, extract_mode: $extract_mode}' \
     > "$dir/manifest.json"
 }
 
@@ -94,6 +96,27 @@ make_distro() {
   grep -q 'rd.live.dir=/distros/fedora' "$cfg"
   ! grep -q 'CDLABEL=Fedora-WS-Live-44' "$cfg"
   ! grep -q 'live-media-path=/distros/fedora' "$cfg"
+}
+
+@test "grub_generate rewrites Fedora Server DVD stage2 and repo to extracted tree" {
+  make_distro "fedora-server" "Install Fedora 42" "images/pxeboot/vmlinuz" "images/pxeboot/initrd.img" "inst.stage2=hd:LABEL=Fedora-S-dvd-x86_64-42 quiet" "" "images/install.img" "tree"
+  mkdir -p "$TEST_DIR/distros/fedora-server/repodata"
+  echo "fake-repodata" > "$TEST_DIR/distros/fedora-server/repodata/repomd.xml"
+  grub_generate "$TEST_DIR"
+  local cfg="$TEST_DIR/boot/grub/grub.cfg"
+  grep -q 'linux /distros/fedora-server/images/pxeboot/vmlinuz' "$cfg"
+  grep -q 'initrd /distros/fedora-server/images/pxeboot/initrd.img' "$cfg"
+  grep -q 'inst.stage2=hd:LABEL=WINNIE:/distros/fedora-server' "$cfg"
+  grep -q 'inst.repo=hd:LABEL=WINNIE:/distros/fedora-server' "$cfg"
+  ! grep -q 'Fedora-S-dvd-x86_64-42' "$cfg"
+}
+
+@test "grub_generate does not add local repo for Fedora Server netinst without repodata" {
+  make_distro "fedora-netinst" "Install Fedora 42" "images/pxeboot/vmlinuz" "images/pxeboot/initrd.img" "inst.stage2=hd:LABEL=Fedora-S-netinst-x86_64-42 quiet" "" "images/install.img" "tree"
+  grub_generate "$TEST_DIR"
+  local cfg="$TEST_DIR/boot/grub/grub.cfg"
+  grep -q 'inst.stage2=hd:LABEL=WINNIE:/distros/fedora-netinst' "$cfg"
+  ! grep -q 'inst.repo=hd:LABEL=WINNIE:/distros/fedora-netinst' "$cfg"
 }
 
 @test "grub_generate does not add live-media-path when no squashfs" {

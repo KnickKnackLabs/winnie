@@ -19,7 +19,7 @@
 ![shell: bash](https://img.shields.io/badge/shell-bash-4EAA25?style=flat&logo=gnubash&logoColor=white)
 [![tasks: mise](https://img.shields.io/badge/tasks-mise-7c3aed?style=flat)](https://mise.jdx.dev)
 [![vm: QEMU](https://img.shields.io/badge/vm-QEMU-ff6600?style=flat&logo=qemu&logoColor=white)](https://www.qemu.org)
-[![tests: 175 passing](https://img.shields.io/badge/tests-175%20passing-blue?style=flat)](https://bats-core.readthedocs.io)
+[![tests: 179 passing](https://img.shields.io/badge/tests-179%20passing-blue?style=flat)](https://bats-core.readthedocs.io)
 
 </div>
 
@@ -102,7 +102,7 @@ Auto-discovered from `.mise/tasks/`. **This table updates when you add or rename
 | ----------------------- | ----------------------------------------------------------------- |
 | `winnie catalog:alpine` | Show available Alpine Linux versions and variants                 |
 | `winnie catalog:debian` | Show available Debian Live versions and variants                  |
-| `winnie catalog:fedora` | Show available Fedora Workstation versions                        |
+| `winnie catalog:fedora` | Show available Fedora versions and variants                       |
 | `winnie catalog:mint`   | Show available Linux Mint versions and variants                   |
 | `winnie catalog:pop-os` | Show available Pop!_OS versions and variants                      |
 | `winnie disk:add`       | Copy an ISO file onto a winnie disk                               |
@@ -209,4 +209,4 @@ Formatting a disk for a non-native architecture (e.g., x86_64 GRUB on an arm64 h
 mise run test
 ```
 
-175 tests across 12 BATS files — architecture helpers, GRUB generation, ISO extraction, disk format routing.
+179 tests across 12 BATS files — architecture helpers, GRUB generation, ISO extraction, disk format routing.
