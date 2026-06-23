@@ -19,7 +19,7 @@
 ![shell: bash](https://img.shields.io/badge/shell-bash-4EAA25?style=flat&logo=gnubash&logoColor=white)
 [![tasks: mise](https://img.shields.io/badge/tasks-mise-7c3aed?style=flat)](https://mise.jdx.dev)
 [![vm: QEMU](https://img.shields.io/badge/vm-QEMU-ff6600?style=flat&logo=qemu&logoColor=white)](https://www.qemu.org)
-[![tests: 179 passing](https://img.shields.io/badge/tests-179%20passing-blue?style=flat)](https://bats-core.readthedocs.io)
+[![tests: 180 passing](https://img.shields.io/badge/tests-180%20passing-blue?style=flat)](https://bats-core.readthedocs.io)
 
 </div>
 
@@ -209,4 +209,4 @@ Formatting a disk for a non-native architecture (e.g., x86_64 GRUB on an arm64 h
 mise run test
 ```
 
-179 tests across 12 BATS files — architecture helpers, GRUB generation, ISO extraction, disk format routing.
+180 tests across 12 BATS files — architecture helpers, GRUB generation, ISO extraction, disk format routing.

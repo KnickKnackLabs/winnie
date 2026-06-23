@@ -38,8 +38,18 @@ fi
 
 # --- Step 1: Extract boot files from ISO on the host ---
 
-EXTRACT_DIR=$(mktemp -d)
-trap 'rm -rf "$EXTRACT_DIR"' EXIT
+EXTRACT_PARENT="${WINNIE_TMPDIR:-$(dirname "$IMAGE")/.winnie-tmp}"
+mkdir -p "$EXTRACT_PARENT"
+EXTRACT_DIR=$(mktemp -d "$EXTRACT_PARENT/extract.XXXXXX")
+cleanup_extract() {
+  rm -rf "$EXTRACT_DIR"
+  if [[ -z "${WINNIE_TMPDIR:-}" ]]; then
+    if ! rmdir "$EXTRACT_PARENT" 2>/dev/null; then
+      :
+    fi
+  fi
+}
+trap cleanup_extract EXIT
 
 ISO_BASENAME="$(basename "$ISO" .iso)"
 echo "Extracting boot files from $ISO_BASENAME..."

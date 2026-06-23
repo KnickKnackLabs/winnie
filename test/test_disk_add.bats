@@ -47,6 +47,11 @@ setup() {
   grep -Fq 'cp -R "$EXTRACT_DIR"/. "$DISTRO_DIR/"' "$REPO_DIR/.mise/tasks/disk/add/device"
 }
 
+@test "disk:add --image creates extraction temp dir beside image by default" {
+  grep -Fq 'EXTRACT_PARENT="${WINNIE_TMPDIR:-$(dirname "$IMAGE")/.winnie-tmp}"' "$REPO_DIR/.mise/tasks/disk/add/image"
+  grep -Fq 'mktemp -d "$EXTRACT_PARENT/extract.XXXXXX"' "$REPO_DIR/.mise/tasks/disk/add/image"
+}
+
 @test "disk:add --image fails if ISO too large for image" {
   dd if=/dev/zero of="$TEST_DIR/tiny.img" bs=1024 count=1 2>/dev/null
   dd if=/dev/zero of="$TEST_DIR/big.iso" bs=1024 count=2 2>/dev/null
