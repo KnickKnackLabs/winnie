@@ -42,6 +42,11 @@ setup() {
   [[ "$output" == *"does not exist"* ]]
 }
 
+@test "disk:add copy paths preserve hidden installer tree files" {
+  grep -Fq 'cp -R /extract/. "$DISTRO_DIR/"' "$REPO_DIR/.mise/tasks/disk/add/image"
+  grep -Fq 'cp -R "$EXTRACT_DIR"/. "$DISTRO_DIR/"' "$REPO_DIR/.mise/tasks/disk/add/device"
+}
+
 @test "disk:add --image fails if ISO too large for image" {
   dd if=/dev/zero of="$TEST_DIR/tiny.img" bs=1024 count=1 2>/dev/null
   dd if=/dev/zero of="$TEST_DIR/big.iso" bs=1024 count=2 2>/dev/null
