@@ -5,6 +5,7 @@ bats_require_minimum_version 1.5.0
 
 setup() {
   export WINNIE_CALLER_PWD="$BATS_TEST_TMPDIR/caller"
+  PHYSICAL_REPO_DIR="$(cd "$REPO_DIR" && pwd -P)"
 
   MOCK_DIR="$BATS_TEST_TMPDIR/test-runner-bin"
   BATS_LOG="$BATS_TEST_TMPDIR/bats.log"
@@ -52,7 +53,7 @@ arg_count() {
   [ "$(log_value jobs)" = "4" ]
   [ "$(log_value runner)" = "$MOCK_DIR/rush" ]
   [ "$(arg_count --no-parallelize-within-files)" -eq 0 ]
-  [ "$(arg_count "$REPO_DIR/test/test_iso_get.bats")" -eq 1 ]
+  [ "$(arg_count "$PHYSICAL_REPO_DIR/test/test_iso_get.bats")" -eq 1 ]
   [ "$(arg_count "$REPO_DIR/test/integration/test_vm_input.bats")" -eq 0 ]
 }
 
@@ -60,7 +61,7 @@ arg_count() {
   run winnie test iso_get --filter 'checksum mismatch'
 
   [ "$status" -eq 0 ]
-  [ "$(arg_count "$REPO_DIR/test/test_iso_get.bats")" -eq 1 ]
+  [ "$(arg_count "$PHYSICAL_REPO_DIR/test/test_iso_get.bats")" -eq 1 ]
   [ "$(arg_count --filter)" -eq 1 ]
   [ "$(arg_count 'checksum mismatch')" -eq 1 ]
 }
