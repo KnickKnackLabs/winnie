@@ -25,14 +25,14 @@ NATIVE_DEB_ARCH="$(dpkg --print-architecture)"
 NATIVE_ARCH="$(normalize_arch "$NATIVE_DEB_ARCH")"
 
 echo "Container arch: $NATIVE_DEB_ARCH ($NATIVE_ARCH)"
-echo "Target arches: ${ARCHES[*]}"
+echo "Target arches: ${ARCHES[*]+"${ARCHES[*]}"}"
 
 # --- Collect native packages and identify cross-arch targets ---
 
 NATIVE_PACKAGES=""
 CROSS_ARCHES=()
 
-for arch in "${ARCHES[@]}"; do
+for arch in ${ARCHES[@]+"${ARCHES[@]}"}; do
   if [[ "$arch" == "$NATIVE_ARCH" ]]; then
     NATIVE_PACKAGES="$(grub_packages "$arch")"
   else
@@ -73,7 +73,7 @@ for cross in "${CROSS_ARCHES[@]+"${CROSS_ARCHES[@]}"}"; do
   done
 
   # apt-get download always writes to cwd, ignoring Dir::Cache::Archives
-  (cd "$cross_dir" && apt-get download "${cross_pkgs[@]}")
+  (cd "$cross_dir" && apt-get download ${cross_pkgs[@]+"${cross_pkgs[@]}"})
 
   mkdir -p "$cross_dir/extracted"
   for deb in "$cross_dir"/*.deb; do
@@ -170,7 +170,7 @@ install_cross_grub() {
   grub-install --directory="$module_dir" "$@"
 }
 
-for arch in "${ARCHES[@]}"; do
+for arch in ${ARCHES[@]+"${ARCHES[@]}"}; do
   echo "Installing GRUB for $arch..."
   is_native=$([[ "$arch" == "$NATIVE_ARCH" ]] && echo true || echo false)
 
@@ -185,9 +185,9 @@ for arch in "${ARCHES[@]}"; do
     fi
 
     if $is_native; then
-      install_native_grub "$target" "${args[@]}"
+      install_native_grub "$target" ${args[@]+"${args[@]}"}
     else
-      install_cross_grub "$target" "$arch" "${args[@]}"
+      install_cross_grub "$target" "$arch" ${args[@]+"${args[@]}"}
     fi
   done < <(grub_targets "$arch")
 done

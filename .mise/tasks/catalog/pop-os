@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Show available Pop!_OS versions and variants"
+#USAGE example "mise run catalog:pop-os --version 24.04 --arch x86_64" header="Show Pop!_OS variants"
 #USAGE flag "-v --version <version>" help="Show variants for a specific version"
 #USAGE flag "--arch <arch>" help="Architecture (default: host)" default=""
 #USAGE flag "--json" help="Output as JSON"

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Download and verify an ISO from the catalog"
+#USAGE example "mise run iso:get fedora --version 44 --variant workstation" header="Download a catalog ISO"
 #USAGE arg "<distro>" help="Distribution name (alpine, debian, fedora, mint, pop-os)"
 #USAGE flag "-v --version <version>" help="Version to download"
 #USAGE flag "--arch <arch>" help="Architecture (default: host)" default=""
@@ -111,7 +112,7 @@ echo ""
 
 CURL_ARGS=(-fL -o "$dest")
 [[ -t 1 ]] && CURL_ARGS+=(--progress-bar) || CURL_ARGS+=(-sS)
-${CURL:-curl} "${CURL_ARGS[@]}" "$url" || die "download failed"
+${CURL:-curl} ${CURL_ARGS[@]+"${CURL_ARGS[@]}"} "$url" || die "download failed"
 
 # --- verify ---
 

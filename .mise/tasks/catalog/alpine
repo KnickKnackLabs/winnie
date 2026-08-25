@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Show available Alpine Linux versions and variants"
+#USAGE example "mise run catalog:alpine --version 3.21 --arch x86_64" header="Show Alpine variants"
 #USAGE flag "-v --version <version>" help="Show variants for a specific version"
 #USAGE flag "--arch <arch>" help="Architecture (default: host)" default=""
 #USAGE flag "--json" help="Output as JSON"

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Show available Linux Mint versions and variants"
+#USAGE example "mise run catalog:mint --version 22.1 --arch x86_64" header="Show Linux Mint variants"
 #USAGE flag "-v --version <version>" help="Show variants for a specific version"
 #USAGE flag "--arch <arch>" help="Architecture (default: host)" default=""
 #USAGE flag "--json" help="Output as JSON"
@@ -18,7 +19,10 @@ fetch_version_detail() {
   html=$(curl -fsSL "$MIRROR/$VERSION/") || { echo "Error: Mint $VERSION not found. This distro may not publish ISOs for this version." >&2; exit 1; }
   sha_content=$(curl -fsSL "$MIRROR/$VERSION/sha256sum.txt" 2>/dev/null || echo "")
 
-  mapfile -t isos < <(echo "$html" | sed -n 's/.*href="\([^"]*\.iso\)".*/\1/p')
+  isos=()
+  while IFS= read -r iso; do
+    [ -z "$iso" ] || isos+=("$iso")
+  done < <(echo "$html" | sed -n 's/.*href="\([^"]*\.iso\)".*/\1/p')
 
   if [[ ${#isos[@]} -eq 0 ]]; then
     echo "No ISOs found for version $VERSION." >&2
@@ -26,7 +30,7 @@ fetch_version_detail() {
   fi
 
   parsed=""
-  for iso in "${isos[@]}"; do
+  for iso in ${isos[@]+"${isos[@]}"}; do
     variant="unknown"
     case "$iso" in *cinnamon*) variant="cinnamon" ;; *mate*) variant="mate" ;; *xfce*) variant="xfce" ;; esac
     arch="unknown"

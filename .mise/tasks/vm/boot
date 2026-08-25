@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Boot a winnie disk image in QEMU"
+#USAGE example "mise run vm:boot --image disk.img --uefi" header="Boot a disk image"
 #USAGE flag "-i --image <path>" help="Disk image path" default=""
 #USAGE flag "--arch <arch>" help="Guest architecture (default: host)" default=""
 #USAGE flag "--uefi" help="Boot in UEFI mode (default: BIOS)"
@@ -207,4 +208,4 @@ OPTS="$GUEST_ARCH, $BOOT_MODE, ${MEMORY}MB RAM, ${CPUS} CPUs, $ACCEL_LABEL, $NET
 [[ "$HEADLESS" == "true" ]] && OPTS="$OPTS, headless"
 
 echo "Booting $BOOT_SOURCE ($OPTS)..."
-exec "${QEMU_ARGS[@]}"
+exec ${QEMU_ARGS[@]+"${QEMU_ARGS[@]}"}

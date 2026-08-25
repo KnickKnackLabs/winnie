@@ -44,7 +44,7 @@ if [[ ${#missing[@]} -eq 0 ]]; then
   exit 0
 fi
 
-echo "Missing: ${missing[*]}"
+echo "Missing: ${missing[*]+"${missing[*]}"}"
 echo ""
 
 # Detect package manager
@@ -58,25 +58,25 @@ elif check pacman; then
   PM="pacman"
 else
   echo "Could not detect a supported package manager."
-  echo "Please install manually: ${missing[*]}"
+  echo "Please install manually: ${missing[*]+"${missing[*]}"}"
   exit 1
 fi
 
 install_brew() {
   local pkgs=()
-  for dep in "${missing[@]}"; do
+  for dep in ${missing[@]+"${missing[@]}"}; do
     case "$dep" in
       mkisofs) pkgs+=("cdrtools") ;;
       qemu)    pkgs+=("qemu") ;;
       socat)   pkgs+=("socat") ;;
     esac
   done
-  [[ ${#pkgs[@]} -gt 0 ]] && brew install "${pkgs[@]}"
+  [[ ${#pkgs[@]} -gt 0 ]] && brew install ${pkgs[@]+"${pkgs[@]}"}
 }
 
 install_apt() {
   local pkgs=()
-  for dep in "${missing[@]}"; do
+  for dep in ${missing[@]+"${missing[@]}"}; do
     case "$dep" in
       grub)    pkgs+=("grub-pc-bin" "grub-efi-amd64-bin" "grub2-common") ;;
       mkfs)    pkgs+=("dosfstools" "e2fsprogs") ;;
@@ -86,12 +86,12 @@ install_apt() {
       socat)   pkgs+=("socat") ;;
     esac
   done
-  [[ ${#pkgs[@]} -gt 0 ]] && sudo apt-get update && sudo apt-get install -y "${pkgs[@]}"
+  [[ ${#pkgs[@]} -gt 0 ]] && sudo apt-get update && sudo apt-get install -y ${pkgs[@]+"${pkgs[@]}"}
 }
 
 install_dnf() {
   local pkgs=()
-  for dep in "${missing[@]}"; do
+  for dep in ${missing[@]+"${missing[@]}"}; do
     case "$dep" in
       grub)    pkgs+=("grub2-pc-modules" "grub2-efi-x64-modules" "grub2-tools") ;;
       mkfs)    pkgs+=("dosfstools" "e2fsprogs") ;;
@@ -101,12 +101,12 @@ install_dnf() {
       socat)   pkgs+=("socat") ;;
     esac
   done
-  [[ ${#pkgs[@]} -gt 0 ]] && sudo dnf install -y "${pkgs[@]}"
+  [[ ${#pkgs[@]} -gt 0 ]] && sudo dnf install -y ${pkgs[@]+"${pkgs[@]}"}
 }
 
 install_pacman() {
   local pkgs=()
-  for dep in "${missing[@]}"; do
+  for dep in ${missing[@]+"${missing[@]}"}; do
     case "$dep" in
       grub)    pkgs+=("grub") ;;
       mkfs)    pkgs+=("dosfstools" "e2fsprogs") ;;
@@ -116,7 +116,7 @@ install_pacman() {
       socat)   pkgs+=("socat") ;;
     esac
   done
-  [[ ${#pkgs[@]} -gt 0 ]] && sudo pacman -S --noconfirm "${pkgs[@]}"
+  [[ ${#pkgs[@]} -gt 0 ]] && sudo pacman -S --noconfirm ${pkgs[@]+"${pkgs[@]}"}
 }
 
 echo "Installing via $PM..."

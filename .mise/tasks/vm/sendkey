@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Send a key press to a running winnie VM"
+#USAGE example "mise run vm:sendkey --vm alpine ctrl-alt-delete" header="Send keys to a VM"
 #USAGE flag "--vm <name>" help="VM identifier (from vm:list)"
 #USAGE flag "-d --delay <ms>" help="Hold time in milliseconds" default="100"
 #USAGE arg "<keys>" help="Key name(s) — e.g., ret, tab, shift-a, ctrl-alt-delete" var=#true

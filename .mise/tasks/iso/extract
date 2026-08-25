@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Extract boot files from an ISO and write a manifest"
+#USAGE example "mise run iso:extract alpine.iso --output extracted/alpine" header="Extract an ISO"
 #USAGE arg "<iso>" help="Path to ISO file"
 #USAGE flag "-o --output <dir>" help="Output directory for extracted files" required
 set -euo pipefail

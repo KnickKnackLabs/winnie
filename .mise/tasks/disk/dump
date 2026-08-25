@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Dump a physical device to a disk image"
+#USAGE example "mise run disk:dump --device /dev/disk4 --image usb.img" header="Create a compact device dump"
 #USAGE flag "-d --device <device>" help="Block device (e.g., /dev/disk4)" required
 #USAGE flag "-i --image <path>" help="Output image path" required
 #USAGE flag "--full" help="Dump entire device (default for whole disks: compact, stops after last partition)"

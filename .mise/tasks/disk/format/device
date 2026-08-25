@@ -67,7 +67,7 @@ echo "  Part 1: BIOS Boot     ($BIOS_BOOT_SIZE)"
 echo "  Part 2: EFI System    ($EFI_SIZE, FAT32)"
 echo "  Part 3: Data          (remaining, ext4, label: $LABEL)"
 echo ""
-echo "GRUB targets: ${ARCHES[*]}"
+echo "GRUB targets: ${ARCHES[*]+"${ARCHES[*]}"}"
 echo ""
 
 SKIP_CONFIRM="$SKIP_CONFIRM" confirm_or_exit "Proceed with formatting $DEVICE?"
@@ -86,11 +86,11 @@ done
 docker run --rm --privileged \
   -v "$MISE_CONFIG_ROOT":/repo:ro \
   debian:bookworm \
-  bash /repo/lib/format-inner.sh device "$DEVICE" "${ARCHES[@]}"
+  bash /repo/lib/format-inner.sh device "$DEVICE" ${ARCHES[@]+"${ARCHES[@]}"}
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "winnie: $DEVICE is ready! (${ARCHES[*]})"
+echo "winnie: $DEVICE is ready! (${ARCHES[*]+"${ARCHES[*]}"})"
 echo ""
 echo "Next steps:"
 echo "  winnie disk:add <iso-file> -d $DEVICE"

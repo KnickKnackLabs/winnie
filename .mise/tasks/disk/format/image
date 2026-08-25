@@ -42,11 +42,11 @@ docker run --rm --privileged \
   -v "$MISE_CONFIG_ROOT":/repo:ro \
   -v "$(cd "$(dirname "$OUTPUT")" && pwd)":/out \
   debian:bookworm \
-  bash /repo/lib/format-inner.sh image "$OUTPUT_BASENAME" "${ARCHES[@]}"
+  bash /repo/lib/format-inner.sh image "$OUTPUT_BASENAME" ${ARCHES[@]+"${ARCHES[@]}"}
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Image ready: $OUTPUT (${ARCHES[*]})"
+echo "Image ready: $OUTPUT (${ARCHES[*]+"${ARCHES[*]}"})"
 echo ""
 echo "Add ISOs with:"
 echo "  winnie disk:add <iso-file> --image $OUTPUT"

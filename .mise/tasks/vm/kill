@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Stop a running winnie VM"
+#USAGE example "mise run vm:kill --vm alpine" header="Stop a VM"
 #USAGE flag "--vm <name>" help="VM identifier (from vm:list)"
 set -euo pipefail
 

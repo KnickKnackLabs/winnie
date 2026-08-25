@@ -78,7 +78,7 @@ if [[ "$OS" == "Darwin" ]]; then
 
   EFI_CHECKED=false
 
-  for PART_ID in "${PARTITIONS[@]}"; do
+  for PART_ID in ${PARTITIONS[@]+"${PARTITIONS[@]}"}; do
     PART_DEV="/dev/$PART_ID"
     PART_TYPE=$(diskutil info "$PART_DEV" | awk -F: '/Partition Type:/ {gsub(/^[ \t]+/, "", $2); print $2}')
     PART_SIZE=$(diskutil info "$PART_DEV" | awk '/Disk Size:/ {print $3 " " $4}')
@@ -177,7 +177,7 @@ if [[ "$OS" == "Darwin" ]]; then
 
   echo ""
   echo "To dump a specific partition for offline inspection:"
-  for DUMP_ID in "${PARTITIONS[@]}"; do
+  for DUMP_ID in ${PARTITIONS[@]+"${PARTITIONS[@]}"}; do
     echo "  winnie disk:dump --device /dev/$DUMP_ID --image $DUMP_ID.img"
   done
   echo ""

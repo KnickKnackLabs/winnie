@@ -340,10 +340,17 @@ winnie vm:console                 # Interactive QEMU monitor`}</CodeBlock>
     </Section>
 
     <Section title="Testing">
-      <CodeBlock lang="bash">{`mise run test`}</CodeBlock>
+      <CodeBlock lang="bash">{`# Fast suite: four KKL BATS/Rush jobs across and within files
+mise run test
+
+# Serial debugging
+mise run test --jobs 1
+
+# Slow VM integration remains explicit
+mise run test test/integration/test_vm_input.bats`}</CodeBlock>
 
       <Paragraph>
-        {`${testCount} tests across ${countBatsFiles()} BATS files — architecture helpers, GRUB generation, ISO extraction, disk format routing.`}
+        {`${testCount} fast tests across ${countBatsFiles()} BATS files — architecture helpers, GRUB generation, ISO extraction, disk format routing, and public runner behavior. Mutable state is isolated per test; QEMU integration coverage remains opt-in.`}
       </Paragraph>
     </Section>
   </>
