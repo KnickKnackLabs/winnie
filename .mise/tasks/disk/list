@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="List distros on a winnie disk"
+#USAGE example "mise run disk:list --device /dev/sdb" header="List installed distros"
 #USAGE flag "-d --device <device>" help="Block device (e.g., /dev/sdb)" required
 set -euo pipefail
 
@@ -57,9 +58,9 @@ done
 
 if [[ $count -gt 0 ]]; then
   if command -v gum >/dev/null 2>&1; then
-    printf '%s\n' "${rows[@]}" | gum table -s '|' -c "DISTRO,SIZE,TITLE" -p
+    printf '%s\n' ${rows[@]+"${rows[@]}"} | gum table -s '|' -c "DISTRO,SIZE,TITLE" -p
   else
-    for row in "${rows[@]}"; do
+    for row in ${rows[@]+"${rows[@]}"}; do
       IFS='|' read -r slug size title <<< "$row"
       printf "  %-40s %8s  %s\n" "$slug" "$size" "$title"
     done

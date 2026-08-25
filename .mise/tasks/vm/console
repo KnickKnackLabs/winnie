@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Attach to the QEMU monitor console of a running winnie VM"
+#USAGE example "mise run vm:console --vm alpine" header="Attach to a VM console"
 #USAGE flag "--vm <name>" help="VM identifier (from vm:list)"
 set -euo pipefail
 

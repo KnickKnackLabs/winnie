@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Deploy latest grub.cfg to an existing disk image (fast iteration)"
+#USAGE example "mise run grub:deploy --image disk.img" header="Refresh GRUB configuration"
 #USAGE flag "-i --image <path>" help="Disk image path" default="disk.img"
 set -euo pipefail
 

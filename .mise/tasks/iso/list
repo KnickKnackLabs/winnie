@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="List ISOs in the local store"
+#USAGE example "mise run iso:list --json" header="List stored ISOs as JSON"
 #USAGE flag "--json" help="Output as JSON"
 set -euo pipefail
 
@@ -29,7 +30,7 @@ for f in "$ISO_DIR"/*.iso; do
 done
 
 if [[ "$JSON" == "true" ]]; then
-  printf '%s\n' "${rows[@]}" | jq -R '
+  printf '%s\n' ${rows[@]+"${rows[@]}"} | jq -R '
     split("\t") | {
       filename: .[0],
       size: .[1],
@@ -41,6 +42,6 @@ else
   echo ""
   {
     printf 'Filename\tSize\tSHA256\n'
-    printf '%s\n' "${rows[@]}" | awk -F'\t' '{printf "%s\t%s\t%.12s…\n", $1, $2, $3}'
+    printf '%s\n' ${rows[@]+"${rows[@]}"} | awk -F'\t' '{printf "%s\t%s\t%.12s…\n", $1, $2, $3}'
   } | gum table -p --separator "	"
 fi

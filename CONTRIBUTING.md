@@ -15,6 +15,8 @@ mise install
 mise run setup
 
 mise run test
+mise run test --jobs 1
+mise run test test/integration/test_vm_input.bats
 mise run doctor
 ```
 
@@ -29,7 +31,9 @@ readme build --check
 git diff --check
 ```
 
-`mise run test` runs the fast BATS suite. Slow VM interaction coverage lives under `test/integration/` and skips unless QEMU plus a cached Alpine ISO are available.
+`mise run test` runs the fast BATS suite with four KKL BATS/Rush jobs across and within files. Tests isolate mutable state per test. Use `--jobs 1` for serial debugging.
+
+Slow VM interaction coverage remains opt-in under `test/integration/` and skips unless QEMU plus a cached Alpine ISO are available. Pass an integration file explicitly when those prerequisites are intended.
 
 ## USB safety
 

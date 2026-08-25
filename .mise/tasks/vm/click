@@ -1,5 +1,6 @@
 #!/usr/bin/env -S uv run --script
 #MISE description="Click at coordinates in a running winnie VM"
+#USAGE example "mise run vm:click --vm alpine 640 360" header="Click inside a VM"
 #USAGE flag "--vm <name>" help="VM identifier (from vm:list)"
 #USAGE flag "--right" help="Right-click instead of left-click"
 #USAGE flag "--double" help="Double-click"

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Copy an ISO file onto a winnie disk"
+#USAGE example "mise run disk:add ubuntu.iso --image disk.img" header="Add an ISO to a disk image"
 #USAGE arg "<iso>" help="Path to ISO file to add"
 #USAGE flag "-d --device <device>" help="Block device (e.g., /dev/sdb)"
 #USAGE flag "-i --image <path>" help="Disk image path"

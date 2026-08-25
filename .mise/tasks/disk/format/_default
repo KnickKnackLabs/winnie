@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Format a device or image as a winnie multiboot drive"
+#USAGE example "mise run disk:format --image disk.img --size 2048" header="Create a multiboot disk image"
 #USAGE flag "-d --device <device>" help="Block device (e.g., /dev/sdb)"
 #USAGE flag "-i --image <path>" help="Disk image path (creates if needed)"
 #USAGE flag "-s --size <size>" help="Image size in MB (with --image)" default="2048"
@@ -36,8 +37,8 @@ fi
 if [[ -n "$DEVICE" ]]; then
   ARGS=("--device" "$DEVICE")
   [[ "${usage_yes:-false}" == "true" ]] && ARGS+=("--yes")
-  mise run -q disk:format:device -- "${ARGS[@]}" "${ARCH_ARGS[@]+"${ARCH_ARGS[@]}"}"
+  mise run -q disk:format:device -- ${ARGS[@]+"${ARGS[@]}"} ${ARCH_ARGS[@]+"${ARCH_ARGS[@]}"}
 else
   ARGS=("--image" "$IMAGE" "--size" "${usage_size}")
-  mise run -q disk:format:image -- "${ARGS[@]}" "${ARCH_ARGS[@]+"${ARCH_ARGS[@]}"}"
+  mise run -q disk:format:image -- ${ARGS[@]+"${ARGS[@]}"} ${ARCH_ARGS[@]+"${ARCH_ARGS[@]}"}
 fi

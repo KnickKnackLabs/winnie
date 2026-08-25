@@ -19,7 +19,7 @@
 ![shell: bash](https://img.shields.io/badge/shell-bash-4EAA25?style=flat&logo=gnubash&logoColor=white)
 [![tasks: mise](https://img.shields.io/badge/tasks-mise-7c3aed?style=flat)](https://mise.jdx.dev)
 [![vm: QEMU](https://img.shields.io/badge/vm-QEMU-ff6600?style=flat&logo=qemu&logoColor=white)](https://www.qemu.org)
-[![tests: 180 passing](https://img.shields.io/badge/tests-180%20passing-blue?style=flat)](https://bats-core.readthedocs.io)
+[![tests: 186 passing](https://img.shields.io/badge/tests-186%20passing-blue?style=flat)](https://bats-core.readthedocs.io)
 
 </div>
 
@@ -206,7 +206,14 @@ Formatting a disk for a non-native architecture (e.g., x86_64 GRUB on an arm64 h
 ## Testing
 
 ```bash
+# Fast suite: four KKL BATS/Rush jobs across and within files
 mise run test
+
+# Serial debugging
+mise run test --jobs 1
+
+# Slow VM integration remains explicit
+mise run test test/integration/test_vm_input.bats
 ```
 
-180 tests across 12 BATS files — architecture helpers, GRUB generation, ISO extraction, disk format routing.
+186 fast tests across 13 BATS files — architecture helpers, GRUB generation, ISO extraction, disk format routing, and public runner behavior. Mutable state is isolated per test; QEMU integration coverage remains opt-in.

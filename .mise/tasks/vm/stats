@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Report resource usage for a running winnie VM"
+#USAGE example "mise run vm:stats --vm alpine --json" header="Read VM resource usage"
 #USAGE flag "--vm <name>" help="VM identifier (from vm:list)"
 #USAGE flag "--json" help="Machine-readable JSON output"
 set -euo pipefail

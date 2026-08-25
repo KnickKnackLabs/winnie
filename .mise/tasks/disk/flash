@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Write a winnie disk image to a physical device"
+#USAGE example "mise run disk:flash multiboot.img --device /dev/disk4" header="Flash a disk image"
 #USAGE arg "<image>" help="Path to disk image"
 #USAGE flag "-d --device <device>" help="Block device (e.g., /dev/disk4)" required
 #USAGE flag "-y --yes" help="Skip confirmation prompt"

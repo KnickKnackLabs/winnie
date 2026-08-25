@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Add a local ISO file to the store"
+#USAGE example "mise run iso:add ~/Downloads/alpine.iso --link" header="Link a local ISO into the store"
 #USAGE arg "<file>" help="Path to ISO file"
 #USAGE flag "--link" help="Symlink instead of copy (saves disk space)"
 set -euo pipefail
