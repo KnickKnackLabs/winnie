@@ -19,7 +19,7 @@
 ![shell: bash](https://img.shields.io/badge/shell-bash-4EAA25?style=flat&logo=gnubash&logoColor=white)
 [![tasks: mise](https://img.shields.io/badge/tasks-mise-7c3aed?style=flat)](https://mise.jdx.dev)
 [![vm: QEMU](https://img.shields.io/badge/vm-QEMU-ff6600?style=flat&logo=qemu&logoColor=white)](https://www.qemu.org)
-[![tests: 186 passing](https://img.shields.io/badge/tests-186%20passing-blue?style=flat)](https://bats-core.readthedocs.io)
+[![tests: 187 passing](https://img.shields.io/badge/tests-187%20passing-blue?style=flat)](https://bats-core.readthedocs.io)
 
 </div>
 
@@ -216,4 +216,4 @@ mise run test --jobs 1
 mise run test test/integration/test_vm_input.bats
 ```
 
-186 fast tests across 13 BATS files — architecture helpers, GRUB generation, ISO extraction, disk format routing, and public runner behavior. Mutable state is isolated per test; QEMU integration coverage remains opt-in.
+187 fast tests across 13 BATS files — architecture helpers, GRUB generation, ISO extraction, disk format routing, and public runner behavior. Mutable state is isolated per test; QEMU integration coverage remains opt-in.
